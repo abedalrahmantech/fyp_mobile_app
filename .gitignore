@@ -1,0 +1,28 @@
+# Flutter build and tool directories
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Generated iOS artifacts
+ios/Flutter/ephemeral/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+
+# Generated Android artifacts
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Misc
+.DS_Store
+Thumbs.db

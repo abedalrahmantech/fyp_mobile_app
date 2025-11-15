@@ -59,19 +59,22 @@ String? serializeParam(
         data = (param as DateTime).millisecondsSinceEpoch.toString();
       case ParamType.DateTimeRange:
         data = dateTimeRangeToString(param as DateTimeRange);
+        break;
       case ParamType.LatLng:
         data = (param as LatLng).serialize();
+        break;
       case ParamType.Color:
         data = (param as Color).toCssString();
+        break;
       case ParamType.FFPlace:
         data = placeToString(param as FFPlace);
+        break;
       case ParamType.FFUploadedFile:
         data = uploadedFileToString(param as FFUploadedFile);
+        break;
       case ParamType.JSON:
         data = json.encode(param);
-
-      default:
-        data = null;
+        break;
     }
     return data;
   } catch (e) {
@@ -195,9 +198,6 @@ dynamic deserializeParam<T>(
         return uploadedFileFromString(param);
       case ParamType.JSON:
         return json.decode(param);
-
-      default:
-        return null;
     }
   } catch (e) {
     print('Error deserializing parameter: $e');
