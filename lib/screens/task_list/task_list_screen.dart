@@ -54,10 +54,17 @@ class _TaskListBody extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
+              if (viewModel.pendingSyncCount > 0)
+                _PendingSyncBanner(
+                  count: viewModel.pendingSyncCount,
+                  onSync: () => viewModel.syncPendingDeliveries(),
+                ),
               if (viewModel.errorMessage != null)
                 _InlineNotice(
                   message: viewModel.errorMessage!,
                   usingDemoData: viewModel.usingDemoData,
+                  isOffline: viewModel.isOffline,
+                  lastCacheUpdate: viewModel.lastCacheUpdate,
                 ),
               if (tasks.isEmpty)
                 const Padding(
@@ -155,7 +162,8 @@ class _TaskCard extends StatelessWidget {
     );
   }
 
-  Future<void> _handleMarkDelivered(BuildContext context, DeliveryTask task) async {
+  Future<void> _handleMarkDelivered(
+      BuildContext context, DeliveryTask task) async {
     final viewModel = context.read<TaskViewModel>();
     try {
       await viewModel.markAsDelivered(task);
@@ -167,7 +175,9 @@ class _TaskCard extends StatelessWidget {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(viewModel.errorMessage ?? 'Failed to update task.')),
+          SnackBar(
+              content:
+                  Text(viewModel.errorMessage ?? 'Failed to update task.')),
         );
       }
     }
@@ -202,7 +212,8 @@ class _TaskCard extends StatelessWidget {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
               child: const Text('Confirm'),
             ),
           ],
@@ -224,7 +235,9 @@ class _TaskCard extends StatelessWidget {
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(viewModel.errorMessage ?? 'Failed to record code.')),
+          SnackBar(
+              content:
+                  Text(viewModel.errorMessage ?? 'Failed to record code.')),
         );
       }
     }
@@ -236,14 +249,22 @@ String _formatDate(DateTime value) {
 }
 
 class _InlineNotice extends StatelessWidget {
-  const _InlineNotice({required this.message, required this.usingDemoData});
+  const _InlineNotice({
+    required this.message,
+    required this.usingDemoData,
+    required this.isOffline,
+    required this.lastCacheUpdate,
+  });
 
   final String message;
   final bool usingDemoData;
+  final bool isOffline;
+  final DateTime? lastCacheUpdate;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final details = _buildDetails();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -260,15 +281,28 @@ class _InlineNotice extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              usingDemoData
-                  ? '$message\nShowing sample tasks for demo purposes.'
-                  : message,
+              details,
               style: theme.textTheme.bodyMedium,
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _buildDetails() {
+    if (usingDemoData) {
+      return '$message\nShowing sample tasks for demo purposes.';
+    }
+
+    if (isOffline) {
+      final cacheLabel = lastCacheUpdate != null
+          ? 'Using cached tasks from ${_formatDate(lastCacheUpdate!)}.'
+          : 'Using cached tasks until connectivity returns.';
+      return '$message\n$cacheLabel';
+    }
+
+    return message;
   }
 }
 
@@ -279,17 +313,78 @@ class _LastSyncedIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<TaskViewModel>(
       builder: (context, viewModel, _) {
-        final label = viewModel.isLoading ? 'Syncing…' : 'Last sync: now';
+        final theme = Theme.of(context);
+        final textTheme = theme.textTheme;
+        final label = _buildLabel(viewModel);
+        final color =
+            viewModel.isOffline ? Colors.orange : textTheme.bodySmall?.color;
+
         return Padding(
           padding: const EdgeInsets.only(right: 16),
-          child: Center(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                label,
+                style: textTheme.bodySmall?.copyWith(color: color),
+                textAlign: TextAlign.right,
+              ),
+              if (viewModel.isOffline)
+                Text(
+                  'Offline mode',
+                  style: textTheme.labelSmall
+                      ?.copyWith(color: Colors.orange.shade700),
+                ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  String _buildLabel(TaskViewModel viewModel) {
+    if (viewModel.isLoading) {
+      return 'Syncing…';
+    }
+
+    if (viewModel.lastSuccessfulSync != null) {
+      return 'Last sync ${_formatDate(viewModel.lastSuccessfulSync!)}';
+    }
+
+    return 'Not synced yet';
+  }
+}
+
+class _PendingSyncBanner extends StatelessWidget {
+  const _PendingSyncBanner({required this.count, required this.onSync});
+
+  final int count;
+  final Future<void> Function() onSync;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = count == 1
+        ? '1 delivery queued — tap to sync now'
+        : '$count deliveries queued — tap to sync now';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blueGrey.shade200),
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.sync_problem, color: Colors.blueGrey),
+        title: Text(label, style: theme.textTheme.bodyMedium),
+        trailing: TextButton.icon(
+          onPressed: onSync,
+          icon: const Icon(Icons.sync),
+          label: const Text('Sync'),
+        ),
+      ),
     );
   }
 }
