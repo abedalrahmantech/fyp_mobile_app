@@ -1,0 +1,1242 @@
+1
+
+Department of Computer Science
+BSCCS Final Year Project 2025-2026
+Interim Report I
+
+25CS022
+OrderVista: Unified Consumer Order Tracking Platform
+
+(Volume 1 of
+
+1)
+
+Student Name
+
+: RAHMAN Abed Al
+
+Student No.
+
+: 57744270
+
+Programme Code
+
+: BSCCCU4
+
+Supervisor
+
+: Prof HANCKE, Gerhard
+Petrus
+: November 11, 2025
+
+Date
+
+For Official Use Only
+
+2
+
+Table of Contents
+Cover Page ............................................................................................................................................... 1
+1. Introduction .............................................................................................................................................. 4
+1.1 Problem Context and Industry Challenges......................................................................................... 4
+1.2 Proposed Solution: The OrderVista Application ............................................................................... 5
+1.3 Core Innovations and Technological Integration ............................................................................... 5
+1.4 Project Aims and Contribution .......................................................................................................... 6
+2. Literature Review..................................................................................................................................... 6
+2.1 Path Optimization Algorithms ........................................................................................................... 7
+2.2 Traffic Congestion Alert Systems ...................................................................................................... 9
+2.3 Offline Navigation Technologies ..................................................................................................... 11
+2.4 AI Integrated Systems ...................................................................................................................... 12
+2.4.1 The Evolution of Conversational AI in Enterprise ....................................................................... 13
+2.4.2 Large Language Models (LLMs) for Decision Support ............................................................... 13
+2.4.3 Application in Logistics and Operational Management ................................................................ 13
+2.5 Summary and Research Gap Identification...................................................................................... 14
+3. Methodology and Design Philosophy .................................................................................................... 16
+3.1 Development Methodology ............................................................................................................. 16
+3.2 System Design Goals ....................................................................................................................... 17
+3.3 Scoped Objectives for IR1 ............................................................................................................... 18
+3.4 Research Questions (RQs) ............................................................................................................... 19
+3.5 Scope, Assumptions, and Constraints .............................................................................................. 19
+4. System Architecture ............................................................................................................................... 20
+4.1 High-Level System Architecture ..................................................................................................... 20
+4.2 Technology Stack Justification ........................................................................................................ 21
+4.3 Data Model....................................................................................................................................... 22
+4.4 API and Security Design .................................................................................................................. 23
+4.5 Critical System Flows ...................................................................................................................... 25
+4.6 Security, Observability, and Performance ....................................................................................... 27
+4.7 Summary .......................................................................................................................................... 27
+5. Implementation Plan and Milestones ..................................................................................................... 28
+5.1 Work Breakdown and Timeline ....................................................................................................... 28
+5.2 Verification and Acceptance Criteria ............................................................................................... 29
+5.3 Testing Strategy ............................................................................................................................... 30
+5.4 Risk Mitigation ................................................................................................................................ 31
+6. Preliminary Evaluation Plan .................................................................................................................. 31
+6.1 Evaluation Objectives and Metrics .................................................................................................. 32
+6.2 Datasets, Baselines, and Test Scenarios........................................................................................... 33
+6.3 Evaluation Procedures ..................................................................................................................... 34
+6.4 Instrumentation, Analysis, and Reporting........................................................................................ 34
+
+3
+6.5 Risk Mitigation ................................................................................................................................ 35
+6.6 Conclusion ....................................................................................................................................... 35
+Reference List ............................................................................................................................................ 36
+
+4
+
+1. Introduction
+Logistics is one of those complicated industrial fields out there with complex and tight-knit
+working procedures. Due to its complex nature, most involved tasks can often be labelled as
+“fragmented” (further elucidation follows in this paper). From a technological point of view, it
+can be said that logistics coordinators from all levels of working hierarchy, rarely have access to
+a single, unified platform where they could manage their daily task lists, monitor where a fleet
+of vehicles are located at any given moment, or get route suggestions optimized by advanced
+algorithms. This lack of a centralized, reliable digital system makes it challenging to run
+logistical operations efficiently without hurdles related to time (and therefore impacting the
+overall financial value for the involved businesses).
+1.1 Problem Context and Industry Challenges
+The repercussions of a non-coordinated, poorly optimized logistical operation is reverberated
+across, at different levels of a typical supply chain, which includes loss of valuable time for a
+given business, and customer dissatisfaction (two crucial factors). Such affects are, in fact, more
+pronounced in the context of Hong Kong, which also happens to be one of the top logistical
+hubs of the Asia-Pacific region (Hong Kong Productivity Council, 2022; Knight Frank, 2025;
+Yuen et al., 2018), and one of the world’s most densely urbanized cities. Hong Kong’s
+gridlocked streets, time-sensitive work culture, and the constant juggling of multiple vehicles all
+culminate in severe operational headaches (Taniguchi et al., 2001). Besides just commercial
+implications, the lack of a dependable logistics hub can even lead to real threats impacting
+human safety. For example, employees working on-site may face physical dangers when
+navigating unknown locations, encountering unexpected weather, or experiencing psychological
+pressure because of poor planning and unrealistic deadlines (Apdullah et al., 2021). Moreover,
+drivers tend to lose significant amounts of time waiting in traffic jams when there is a lack of a
+proactive, dynamic digital tool that has the ability to react to changing road conditions and alert
+the concerned person beforehand. Contemporary researchers have demonstrated that this
+
+5
+
+dynamic ability to adapt is paramount in achieving effective and efficient routing (Herrera et al.,
+2010). All of these persistent concerns, point to a technical need for a centralized application
+built specifically for Hong Kong's shipping industry (instead of a general purpose application
+like Google Maps) that can handle both the efficiency problems, and the worker safety concerns
+at a systematically deep level.
+1.2 Proposed Solution: The OrderVista Application
+OrderVista, the application platform described in this paper, is to be designed specifically to
+tackle these problems as aforementioned. What is being proposed, is a system that combines
+advanced web and mobile technologies into one package. It is meant to make work-life easier
+for individual workers at smaller and mid-sized shipping companies in Hong Kong where access
+to cutting edge technologies is often limited (Hong Kong Productivity Council, 2022), and who
+are tasked to manage complicated routes with many stops every day. At the heart of OrderVista
+sits a dual technical structure. On one side, managers get access to a web interface where they
+assign tasks and monitor operations in real-time and also have the chance to track the workers,
+and receive feedback from them as well. On the other side, workers would use a mobile app out
+in the field that visually elucidates the optimal routes to be taken to reach each of their assigned
+stops, and also get real-time updates from managers. This software design directly addresses
+what operations researchers call the "Vehicle Routing Problem", or VRP. That is, drivers get
+routes with multiple stops that have been carefully optimized to save time and cut fuel expenses
+(Toth & Vigo, 2002).
+1.3 Core Innovations and Technological Integration
+One feature that distinguishes OrderVista is how it seeks to integrate a Large Language Model,
+or LLM from the internet cloud. This would act as an intelligent assistant that non-technical or
+less “tech-savvy” workers can talk to naturally. In fact, both workers and managers can pose
+questions in everyday language and get answers right away using natural language processing.
+Since LLMs, an advanced tech-innovation of the 21st century, have emerged only recently, its
+
+6
+
+usage in business-related environments seems to be on fairly unexplored grounds. Nevertheless,
+some of the initial findings look very promising (Hostinger, 2025; Addepto, 2025; Wang et al.,
+2025; Maiti, 2024). Reducing cognitive load is a central concern for any multimodal application
+development, and as of present, it seems to be quite clear that AI-assistants (integrated LLMs)
+are capable of simplifying workflows by allowing people access to complicated bits of
+information through intuitive and conversational interfaces. This, inevitably reduces the overall
+cognitive load on users (Brynjolfsson et al., 2023). Interestingly, developing and integrating
+conversational AI assistants into industry logistics applications represents a departure from
+traditional software practices (Clerk Chat, 2025; Gupshup, 2022; Aiola, 2025; Brown et al.,
+2020; Krishnamoorthy et al., 2024).
+1.4 Project Aims and Contribution
+This paper essentially proposes a novel and technically innovative attempt in developing a
+comprehensive, multimodal, AI-driven application for optimizing shipping related tasks
+effectively, and with respect to the context of Hong Kong. Perhaps, the main reason behind why
+such a proposal would be considered “valuable” lies in the fact that it aims to integrate varoious
+techincially innovative solutions and ideas in one platform, including path optimization
+algorithms, data analytics running on live data streams, as well as a next-generation intelligent
+conversational AI. The proposed application is named “OrderVista”. Such a platform would be
+beneficial not just to medium-sized companies of Hong Kong, but may even be adapted by
+larger logistical companies (if developed effectively). Hence, this project represents a genuine
+and meaningful attempt at creating a technically advanced solution for the second largest
+industry in Hong Kong after finance (Hong Kong Productivity Council, 2022; Knight Frank,
+2025; Mordor Intelligence, 2025; LegCo, 2024).
+2. Literature Review
+This section will examine existing shipping optimization techniques that are already explored by
+researchers and developers. It will also dissect how such techniques are integrated with today’s
+
+7
+
+emerging technologies. Furthermore, this section will analyze currently available multimodal
+applications in the market, along with relevant research on their underlying technologies. In
+summary, the technologies discussed will include path optimization algorithms, systems that
+provide advance warnings about traffic congestion, and navigation tools capable of offline
+operations. Most importantly, this section will highlight the limitations of current practices in
+facilitating frontline logistical work, and demonstrate how the proposed “OrderVista” aims to
+address these technical shortcomings within the context of Hong Kong logistics.
+2.1 Path Optimization Algorithms
+At the heart of logistical optimization tasks lies the vehicle routing problem (VRP), which is a
+concept focused on the efficient allocation of delivery routes. This complex optimization puzzle
+has challenged researchers for over 60 years (Dantzig & Ramser, 1959). Essentially, the VRP
+attempts to technically compute the most optimized routes for operating multiple vehicles such
+that they can serve customers living in different locations, with the sole target of minimizing
+time as much as feasible. VRP is closely related to the famous MinMax algorithm, which in
+logistics is often used to minimize the worst-case scenario, ensuring that no single vehicle
+suffers an excessively high workload compared to others (Bertazzi et al., 2015; Carlsson et al.,
+2006). When VRP is applied, what is ideally expected is that vehicles initiate their routes from a
+central depot, attend to each assigned destination, and finally return. The goal is to do all of this
+while traveling the shortest possible distance or spending the least amount of money (Toth &
+Vigo, 2002). The Vehicle Routing Problem is also classified as an NP hard problem, meaning
+that computational complexity increases exponentially with the number of customers. Owing to
+these computing constraints, heuristic and metaheuristic approaches perform better than exact
+algorithms in large scale real world applications (Laporte, 2009).
+2.1.1 Foundational and Heuristic Approaches
+Classic algorithms form the backbone of modern pathfinding. Dijkstra’s algorithm remains a
+standard method for computing shortest paths in weighted graphs and is widely used in network
+
+8
+
+routing and logistics (Dijkstra, 1959). It grows the search outward from a source node and, when
+all edge weights are nonnegative and represent quantities such as time or distance, it guarantees
+an optimal route. That said, the multi-stop demands of a typical delivery schedule quickly
+outgrow what Dijkstra’s algorithm can deliver on its own. Hence, the famous A* algorithm
+addresses this gap by incorporating a heuristic estimate to indicate the remaining cost to a
+desired destination location. This steers the search toward promising regions and trims wasted
+exploration time (Hart et al., 1968). As a result, the A* algorithm performs especially well in
+point-to-point navigation scenarios. It is a principle applicable from video games all the way up
+to real-world road networks. However, in real logistical settings, rather than being definitive
+solutions to path optimization problems, both Dijkstra's and A* algorithm typically serve only as
+building blocks within broader vehicle routing problem frameworks (Irnich & Desaulniers,
+2005). On the other hand, in column-generation approaches to VRP, the subproblem is typically
+a shortest path problem with resource constraints (SPPRC), which also enforces time windows
+and vehicle capacity during new route constructions, directly connecting to published SPPRC
+literature (Irnich & Desaulniers, 2005).
+2.1.2 Metaheuristic Approaches
+To tackle the full scope of the VRP, researchers have increasingly turned to metaheuristic
+approaches that can find near-optimal solutions in a reasonable amount of time. One prominent
+example is Ant Colony Optimization (ACO), a probabilistic technique inspired by the foraging
+behavior of ants. In ACO, artificial "ants" construct routes, depositing virtual pheromones that
+influence subsequent ants, reinforcing shorter or more efficient paths over many iterations
+(Dorigo & Gambardella, 1997). This method has been successfully applied to various VRPs,
+including those with capacity constraints and time windows. Another powerful class of
+algorithms is Genetic Algorithms (GAs), which simulate the process of natural selection. A GA
+starts with a population of random solutions (routes) and evolves them over generations through
+processes like selection, crossover, and mutation to produce progressively better solutions. GAs
+
+9
+
+have proven effective for a wide range of VRPs, including complex scenarios like the Green
+VRP, which aims to minimize CO2 emissions instead of merely the distance (Erdoğan & MillerHooks, 2012). These advanced algorithms are essential for creating the sophisticated, multivehicle, multi-constraint route plans required by modern logistics operations.
+2.2 Traffic Congestion Alert Systems
+At this stage, traffic congestion alert systems need to come to the discussion as well because
+effective route planning needs to stay flexible rather than locked into a predetermined path.
+Since traffic networks don't behave predictably, patterns fluctuate constantly throughout each
+day. In this context, congestion remains the most disruptive challenge in this area. What appears
+to be an ideal route during planning can quickly deteriorate once vehicles begin accumulating
+one after the other. So far, to address this concern, GPS and logistics systems have adapted by
+incorporating live traffic feeds, allowing routes to change on the fly while keeping drivers
+informed about developing delays (Jain et al., 2023).
+2.2.1 Real-Time Data Collection with Floating Car Data (FCD)
+A key technology enabling real-time traffic monitoring is Floating Car Data (FCD). FCD
+systems collect anonymized, timestamped GPS location and speed data from a large network of
+moving vehicles, such as those using navigation apps or cellular services. This data provides a
+live, comprehensive view of traffic speeds and flow across the entire road network, unlike
+stationary sensors which are limited to fixed locations (Herrera et al., 2010). By aggregating
+FCD, systems can identify congestion as it occurs, calculate accurate travel times, and generate
+traffic reports rapidly. This technology is the backbone of the live traffic features in major
+navigation services and is critical for any system aiming to provide routes that are optimal in
+current conditions.
+2.2.2 Predictive Analytics and AI-Driven Traffic Management
+Recent developments in traffic control go beyond responding to existing situations. In fact, they
+work on anticipating what comes next. Hence, using AI alongside machine learning, advanced
+
+10
+
+platforms can now examine past records together with current activity to predict congestion
+before it forms (Vlahogianni et al., 2014). Spotting patterns like predictable rush hour backups
+or understanding how various weather situations influence flow allows these platforms to
+redirect drivers ahead of trouble. Moreover, AI-based computer vision, frequently built using
+architectures like YOLO (You Only Look Once), now identifies incidents including collisions
+and disabled vehicles while they're happening (Redmon et al., 2016). After detection occurs,
+warnings transmit automatically to drivers approaching the area and traffic management offices,
+keeping movement smoother and reducing crash likelihood. This combination of prediction and
+response defines what makes transportation infrastructure truly intelligent.
+2.2.3 Existing Systems/App Comparison
+To contextualize the innovation of OrderVista, Table 1 compares its core features with existing
+logistics platforms and applications.
+Feature/Functionality Google Maps
+
+Task
+
+No
+
+Lalamove
+
+Yes (limited)
+
+DHL Express
+
+OrderVista
+
+App
+
+(Proposed)
+
+No
+
+Yes (unified,
+
+Allocation/Tracking
+Multi-stop
+
+interactive)
+Yes (manual)
+
+No
+
+No
+
+Optimization
+
+time, bulk)
+
+Offline Navigation & Partial map
+
+No
+
+Yes
+
+Tasks
+Live Traffic
+
+Comm.
+
+Yes (full, incl.
+context/tasks)
+
+Yes
+
+Yes (limited)
+
+Integration
+Dispatcher-Driver
+
+Yes (auto, real-
+
+No
+
+Yes (primitivelevel chat only)
+
+Yes (SMS
+
+Yes (plus task
+
+Only)
+
+impact advice)
+
+Yes (photo)
+
+Yes (AI, chat +
+voice/text)
+
+11
+
+Proof of Delivery
+
+No
+
+No
+
+No
+
+(PoD)
+
+Yes
+(barcode/QR,
+photo, audit)
+
+Conversational AI
+
+No
+
+No
+
+No
+
+Help
+Analytics for SMEs
+
+Yes (LLM for
+drivers/dispatch)
+
+No
+
+No
+
+No
+
+Yes (built-in,
+real-time)
+
+Role-based Security
+
+No
+
+No
+
+Yes (basic)
+
+Yes (multitenant, robust)
+
+HK Local
+
+No
+
+No
+
+Scheduling Rules
+
+No
+
+Yes
+(customized)
+
+Hence, in summary, OrderVista combines real-time dispatch, advanced task management,
+offline operation, role-based security, and LLM-driven natural language UI, which are not
+jointly offered by any single existing competitor.
+2.3 Offline Navigation Technologies
+While real-time data is invaluable, a reliance on constant internet connectivity presents a
+significant vulnerability. This is especially true in areas with poor or non-existent mobile
+coverage. Hence, offline navigation technologies are designed to address this challenge ensuring
+that routing remains functional even without a data connection (Harish & Meena, 2025). As a
+result, this becomes one of the most critical features for logistical operations in diverse or
+remote territories.
+2.3.1 Map Data Storage and Management
+The core of any offline navigation system is the pre-loading of map data onto the user's device.
+Modern applications achieve this efficiently by dividing maps into small, manageable pieces
+called “tiles”. Rather than storing bulky raster images, many systems use vector tiles, which
+define geographic features as points, lines, and polygons. This approach significantly reduces
+
+12
+
+storage requirements and allows for smooth scaling, rotation, and dynamic styling on the client
+device (OpenStreetMap Wiki, 2016). Advanced compression techniques and packaging formats
+like MBTiles, which are essentially SQLite databases, further minimize the data footprint on the
+device. By implementing intelligent cache management, such as a system that automatically
+removes older or less-used map data, applications can provide a robust offline experience
+without overwhelming the device's storage.
+2.3.2 Positioning in GPS-Denied Environments
+When offline, maintaining an accurate position is another challenge, particularly in "urban
+canyons" or tunnels where GPS signals can be weak or lost entirely. To overcome this, advanced
+offline systems employ sensor fusion and dead reckoning techniques (He & Chan, 2016). Dead
+reckoning is a process of calculating one's current position by using a previously determined
+position and advancing that position based on known or estimated speeds over elapsed time and
+course. Smartphones are equipped with a variety of sensors, including accelerometers (to
+measure movement) and gyroscopes (to measure orientation), which can be used to estimate the
+device's trajectory in the absence of a GPS signal (He & Chan, 2016). While prone to drift over
+time, it seems that this method can effectively bridge short gaps in GPS coverage, providing
+continuous and reliable navigation guidance until a satellite signal is reacquired (Renaudin et al.,
+2012).
+2.4 AI Integrated Systems
+Beyond optimizing physical routes and managing real-time data, the next frontier in logistics
+technology lies in enhancing the cognitive interface between the human operator and the
+complex digital ecosystem. While the systems discussed previously focus on calculating optimal
+paths and navigating dynamic environments, a significant opportunity remains to reduce the
+cognitive load on drivers and dispatchers. The integration of advanced Artificial Intelligence
+(AI), particularly in the form of conversational agents (such as Large Language Models),
+represents an important paradigm shift. This translates to possessing the ability from merely
+
+13
+
+providing data to delivering contextual intelligence in an intuitive format and digital
+environment.
+2.4.1 The Evolution of Conversational AI in Enterprise
+The use of automated conversational agents, or chatbots, in commercial applications is not
+entirely a new phenomenon. However, it can be observed that early iterations of the use of AI in
+enterprise software were largely rule-based, limited to responding to a narrow set of preprogrammed commands and frequently failing when users deviated from the expected script
+(Adamopoulou & Moussiades, 2020). However, the recent and rapid advancements in machine
+learning and natural language processing (NLP) have given rise to a new generation of AIpowered conversational systems that are no longer constrained to the aforementioned problems.
+In fact, these systems can comprehend intent, recall context from a conversation, and handle a
+much wider array of complex, unstructured user queries, making them viable for dynamic, highstakes professional environments (Aman et al., 2025).
+2.4.2 Large Language Models (LLMs) for Decision Support
+At the forefront of this evolution are Large Language Models (LLMs), which are deep learning
+models trained on vast datasets of text and code. Based on the highly effective Transformer
+architecture, these LLMs possess an unprecedented ability to understand, summarize, generate,
+and reason about human language (Vaswani et al., 2017). Their application in enterprise settings
+is seen as a transformative step, capable of creating a new "economics of ideas" by dramatically
+lowering the cost of accessing and formulating complex information (Brynjolfsson et al., 2023).
+For a logistics professional, an integrated LLM can act as an intelligent co-pilot, translating
+complex operational data such as traffic patterns, delivery schedules, and vehicle diagnostics
+into simple and actionable advice delivered through human natural language.
+2.4.3 Application in Logistics and Operational Management
+It is important to note that the potential for AI to augment decision-making in supply chain
+management and logistics is a well-documented field of research, with machine learning models
+
+14
+
+being used for everything from demand forecasting to warehouse optimization (Baryannis et al.,
+2019). However, the specific application of a conversational LLM as a real-time support tool for
+on-the-ground personnel is an emerging and highly innovative area. For a driver, this means
+being able to ask questions such as, "What is the most fuel-efficient route to my next stop?" or
+"Are there any reported delivery issues in the Tsim Sha Tsui area?" and then receive an instant,
+context-aware answer from the involved AI assistant. For a dispatcher, it allows for high-level
+queries like, "Which driver has the capacity to handle an urgent pickup near their current
+location?". Hence, by integrating an LLM, a logistics platform evolves from a passive tool for
+displaying information into an active partner in the decision-making process. This directly
+addresses the need for a system that reduces stress and enhances the operational intelligence of
+its users.
+2.5 Summary and Research Gap Identification
+The literature review presented in this paper confirms that the core components of the proposed
+system are individually well-established fields of research. The Vehicle Routing Problem (VRP)
+and its variants have been extensively studied, with a rich body of work on exact methods and,
+more practically, heuristic algorithms like Dijkstra's and A* algorithm for finding optimal paths
+(Dijkstra, 1959; Hart et al., 1968; Toth & Vigo, 2002). Modern AI-powered route optimization
+further enhances these methods by incorporating real-time data such as live traffic and dynamic
+delivery windows to improve efficiency (Taniguchi et al., 2001; Vlahogianni et al., 2014). The
+use of mobile applications in logistics is also prevalent for functions like GPS tracking and fleet
+management, although research suggests that Human-Computer Interaction (HCI) and user
+experience are often secondary considerations in their design (Flachsbart et al., 2013).
+Simultaneously, the application of Large Language Models (LLMs) in supply chain
+management is an emerging and highly promising field (Maiti, 2024; Krishnamoorthy et al.,
+2024). It is seen that the current research demonstrates the potential of LLMs to process
+unstructured data, enhance decision-making, and provide intelligent support (Wang et al., 2025).
+
+15
+
+Microsoft, for example, has demonstrated using LLMs to explain the complex outputs of
+optimization solvers to supply chain planners, bridging the gap between raw data and human
+understanding (Li et al., 2024). This also highlights a trend toward using LLMs not just for
+customer-facing support, but as an internal tool to augment the capabilities of operational staff.
+However, the review reveals a distinct and critical research gap, which this project aims to
+address directly. While existing literature extensively covers route optimization (Toth & Vigo,
+2002; Laporte, 2009) and, separately, the rise of conversational AI (Adamopoulou &
+Moussiades, 2020), there is a clear deficiency in research concerning the synergistic integration
+of these technologies into a single, unified, and user-centric platform specifically for on-theground logistics personnel.
+Therefore, the identified gaps can be summarized as follows:
+1. Lack of Integrated Intelligence: Current logistics platforms are proficient at calculating
+and displaying an optimal route. However, they lack an integrated intelligence layer that
+allows a driver or manager to interact with, query, and understand the operational plan in
+natural language.
+2. Focus on High-Level Planning vs. On-the-Ground Support: Much of the research on
+LLMs in logistics focuses on high-level strategic functions for planners at a desk (Li et
+al., 2023; Wang et al., 2025). There is a notable lack of focus on using LLMs as a realtime "co-pilot" for the mobile worker who is actively executing the logistics plan and
+facing immediate operational uncertainties.
+3. Fragmented User Experience: The current technological landscape often forces a
+logistics operator to mentally bridge the gap between a map interface, a task list, and
+communication channels. This fragmentation can increase cognitive load and work stress
+(Apdullah et al., 2021), which are issues that are particularly acute in the high-pressure,
+complex urban environment of Hong Kong, where last-mile delivery faces unique
+challenges (Yuen et al., 2018).
+
+16
+
+Therefore, this project is positioned at the intersection of these domains. It moves beyond
+treating routing algorithms and AI as isolated components and proposes a holistic system where
+they are deeply integrated. The proposed application is designed to fill the discussed research
+gap by creating a seamless platform that not only provides a mathematically optimized route but
+also empowers the user with an intelligent, conversational interface to manage their tasks and
+navigate the complexities of their environment with reduced stress and enhanced efficiency.
+3. Methodology and Design Philosophy
+This section outlines the methodological approach, design principles, scoped objectives,
+research questions, and constraints that guide the development of the project described in this
+paper, i.e. OrderVista. The overall emphasis is on pragmatic, iterative progress and defensible
+design choices for the long run.
+3.1 Development Methodology
+The development of OrderVista will adhere to a lightweight, iterative methodology. This
+approach structures progress into short, time-boxed cycles, each focused on delivering a vertical
+and end-to-end slice of functionality (e.g., from order import to proof-of-delivery). This cyclical
+process emphasizes incremental advancement and continuous refinement based on internal
+review and testing. At the conclusion of each cycle, a self-review will inform the reprioritization
+of the development backlog, explicitly targeting the mitigation of technical risks.
+Features are packaged as vertical slices to maintain a small, demonstrable scope and to validate
+integrated system behavior early. Technical debt and unresolved edge cases are systematically
+logged for subsequent iteration. The sequencing of work is risk-focused, with initial cycles
+prioritizing core and typically error-prone components of logistics systems, including data
+modeling, access control, offline robustness, route sequencing orchestration, and media
+handling. To ensure traceability and reproducibility, the project will employ version control via
+GitHub.
+
+17
+
+3.2 System Design Goals
+The architectural and design choices for OrderVista are guided by a set of non-functional
+requirements that ensure the system is fit for its intended context. They include, but are not
+limited to:
+1. Usability: Interfaces are designed for clarity and efficiency under time pressure, featuring
+glanceable screens, explicit next actions, minimal manual data entry, and predictable
+workflow patterns.
+2. Pragmatic Scalability: The initial target supports the operational scale typical of small
+and medium-sized enterprises (SMEs). Architectural choices, such as stateless
+components and efficient geospatial queries, are preferred to facilitate future growth
+without requiring fundamental redesign.
+3. Reliability: Core application flows are engineered to tolerate intermittent connectivity.
+This is achieved through mechanisms like local queuing of actions on the mobile client,
+idempotent API operations, and deterministic rules for conflict resolution upon resynchronization.
+4. Security and Privacy: The system enforces role-based access control and data
+partitioning to ensure tenant isolation. Media access is managed via pre-signed URLs
+with short validity periods. While transport-layer encryption is a baseline assumption, the
+design also considers simple data retention and optional redaction policies to minimize
+privacy exposure.
+5. Maintainability: A modular architecture delineates clear boundaries between the mobile
+client, backend API, routing orchestration logic, and media services. To aid
+troubleshooting, the system incorporates basic observability through structured logging
+and the propagation of correlation identifiers across services.
+
+18
+
+3.3 Scoped Objectives for IR1
+The objectives for the first implementation review (IR1) are framed as pragmatic and achievable
+outcomes, expressed as implemented approaches rather than performance or final-product
+guarantees. These include:
+1. O1: Driver Mobile MVP: To provide drivers with a minimal viable product (MVP)
+encompassing authenticated access, a detailed task list, a basic map view, local queuing
+for offline operations, and barcode/QR scanning integrated with photo capture for proofof-delivery.
+2. O2: Backend and Data Model: To define and implement a multi-tenant data schema with
+integrated role-based access controls, event auditing, presigned media upload
+capabilities, and a simple mechanism for real-time status propagation.
+3. O3: Route Sequencing and Persistence: To implement a baseline route sequencing
+method, such as a nearest-next algorithm with optional refinement, or integration with an
+accessible optimization API. The resulting routes, stop sequences, and estimated timings
+will be persisted for execution and review.
+4. O4: Telemetry and Geofencing: To establish a pipeline for ingesting device location
+updates and applying proximity-based geofencing rules to suggest or automatically
+advance task statuses (e.g., 'arrived' or 'completed'), with provisions for manual
+dispatcher override.
+5. O5: Dispatcher Portal MVP: To deliver a web-based dispatcher portal supporting CSV
+order import (with integrated geolocation lookup), task management, tabular route, stop
+visualization, live status filtering, and an interface for reviewing proof-of-delivery
+evidence.
+6. O6: Observability and Demonstration: To instrument basic logging and metrics for
+critical system paths and to produce a coherent, end-to-end demonstration flow that
+validates the IR1 scope.
+
+19
+
+3.4 Research Questions (RQs)
+The following research questions (RQs) are formulated to guide the subsequent evaluation of
+OrderVista. The IR1 implementation will establish the baselines and instrumentation necessary
+for their comprehensive measurement in later stages.
+1.
+
+RQ1 (Routing Efficiency): To what extent does the implemented sequencing approach
+reduce total route duration compared to a simple nearest-next baseline for urban delivery
+routes comprising 10 to 20 stops?
+
+2.
+
+RQ2 (System Responsiveness): What are the observed 95th percentile (p95) latencies for
+route optimization requests (≤20 stops) and for typical CRUD/API operations within the
+system?
+
+3.
+
+RQ3 (Offline Robustness): Under planned disconnection intervals (e.g., approximately
+10 minutes), are task states and user interactions reliably preserved and synchronized to a
+consistent state within a reasonable timeframe after abrupt network reconnections?
+
+4.
+
+RQ4 (Proof-of-Delivery Integrity): Under typical lighting conditions, what is the success
+rate of the barcode/QR scanning function? If OCR is attempted, what is its indicative
+extraction accuracy on a small and defined set of package labels?
+
+3.5 Scope, Assumptions, and Constraints
+So far, the scope for IR1 has been deliberately bounded to ensure a tractable and high-quality
+deliverable.
+
+
+In-Scope: The system will handle single-depot, single-shift routing scenarios,
+incorporating time windows and capacity constraints at a scale practical for small fleets.
+The deliverable includes an Android/iOS driver client, a dispatcher web interface,
+offline-first workflows, and barcode/QR-based proof-of-delivery with photographic
+evidence.
+
+
+
+Assumptions: The project assumes reliable access to geocoding services and road
+network data for Hong Kong, that mobile devices will permit background location
+
+20
+
+updates, that API usage remains within budgeted tiers, and that any pilot data will be
+handled with basic anonymization and limited retention policies.
+
+
+Constraints and Exclusions: Explicitly excluded from the IR1 scope are multi-depot and
+multi-shift scheduling, live re-optimization of active routes, advanced traffic prediction,
+digital signature verification, and sophisticated computer vision tasks beyond basic
+barcode/QR scanning.
+4. System Architecture
+
+OrderVista integrates mobile, web, and cloud to synchronize drivers, dispatchers, and
+management. The core architecture consists of a cross-platform mobile app (Flutter), real-time
+web dashboard (React.js), and a Supabase cloud backend, with Edge Functions connecting to
+both mapping/optimization (Mapbox) and conversational AI (OpenAI GPT-4o).
+This section further delineates the comprehensive system architecture and technical design for
+OrderVista. The design adopts a modern, decoupled paradigm centered on a Backend-as-aService (BaaS) core to accelerate development while ensuring robustness, scalability, and
+security
+4.1 High-Level System Architecture
+At its core, OrderVista is structured into three primary layers:
+1. Client Layer: Comprises a Flutter mobile application for drivers and a React.js web
+dashboard for dispatchers and managers.
+2. Backend Layer: Built on Supabase, providing a suite of integrated services: JWT-based
+authentication, a PostgreSQL database with PostGIS extension for geospatial operations, file
+storage, and real-time channels.
+3. External Services Layer: Integrates specialized third-party APIs, including Mapbox for
+mapping, directions, and route optimization, and OpenAI for the LLM-based intelligent co-pilot.
+Clients communicate directly with Supabase for standard CRUD operations and authentication.
+
+21
+
+For specialized tasks, such as traffic-aware multi-stop routing or LLM interactions, clients
+invoke Supabase Edge Functions. These functions securely call external APIs and persist results
+back to the database. This architecture provides a clear separation of concerns, enhances security
+by keeping secrets server-side, and accelerates development for a solo developer.
+The high-level system architecture is depicted in Figure 1.
+
+Figure 1: OrderVista High-Level System Architecture
+4.2 Technology Stack Justification
+The selection of technologies is primarily driven by the requirements for performance, developer
+efficiency, and ecosystem support. The “tech-stack” chosen is further elaborated as follows:
+1.
+
+Frontend - Flutter & React.js: Flutter was chosen for the driver mobile app due to its
+high-performance native compilation, expressive widget framework, and robust
+plugin ecosystem for critical features like maps and geolocation. React.js was
+selected for the dispatcher web dashboard due to its dominant web ecosystem and
+component-driven architecture, which enables the rapid assembly of complex, datarich interfaces.
+
+2.
+
+Backend - Supabase: Supabase provides an industrial-strength foundation, offering
+PostgreSQL with first-class geospatial capabilities via PostGIS, secure built-in
+
+22
+
+authentication, Row-Level Security (RLS) for multi-tenancy, and real-time
+subscriptions. This significantly reduces the overhead of developing and maintaining
+custom backend infrastructures.
+3.
+
+Serverless Logic - Supabase Edge Functions: These Deno-based functions are ideal
+for encapsulating sensitive operations (e.g., API key usage), compute-heavy tasks,
+and multi-step workflows. They provide a secure environment for server-side
+validation and interaction with external services.
+
+4.
+
+AI & Mapping - OpenAI & Mapbox: The OpenAI GPT-4o API provides state-ofthe-art conversational reasoning for the intelligent co-pilot. Mapbox also offers
+customizable vector maps, traffic-aware routing, and a dedicated Optimization API
+suitable for solving Vehicle Routing Problems (VRP), with strong SDK support for
+both Flutter and web.
+
+4.3 Data Model
+The data schema, implemented in PostgreSQL with PostGIS, models the core entities of a
+logistics operation. It is designed for multi-tenancy, with a “company_id” on all operational
+tables and Row-Level Security (RLS) policies enforcing data isolation. Key entities include:
+1.
+
+Companies & Users: Extends Supabase's auth.users to manage organizations and their
+members with specific roles (e.g., driver, dispatcher, admin).
+
+2.
+
+Vehicles & Tasks: Represent the assets to be managed and the jobs to be completed.
+The tasks.location field is a PostGIS geography type for spatial queries.
+
+3.
+
+Routes & Route_Tasks: The routes table defines a journey for a vehicle and driver,
+while route_tasks acts as a join table specifying the optimized sequence of tasks,
+including calculated ETAs and travel distances.
+
+4.
+
+Telemetry: Continuously records vehicle and driver location data for live tracking and
+geofencing, with a spatial index on the location field for high-performance proximity
+searches.
+
+23
+
+The Entity-Relationship Diagram (ERD) in Figure 2 illustrates these relationships.
+
+Figure 2: OrderVista Logical Data Model
+4.4 API and Security Design
+The API strategy is two-pronged, mainly leveraging the strengths of the Supabase platform.
+1.
+
+Auto-Generated CRUD API: The Supabase client libraries (supabase-flutter,
+supabase-js) provide a type-safe, auto-generated API for all database operations.
+Security is enforced at the data layer via PostgreSQL RLS policies. For example, a
+
+24
+
+policy may ensure a driver can only read tasks and update the status of tasks assigned
+to their active route.
+2.
+
+Custom Business Logic via Edge Functions: For operations involving external APIs
+or complex orchestration, custom Edge Functions are used. These functions validate
+the incoming JWT to ensure the user is authenticated and authorized, execute the
+business logic, and interact with the database.
+
+Furthermore, to illustrate, key endpoints would include:
+1. POST /optimize-route: Accepts a set of tasks and parameters, calls the Mapbox
+Optimization API, and persists the resulting route.
+2. POST /chat-interaction: Fetches relevant user context (e.g., active route, tasks)
+and queries the OpenAI API to generate a grounded, contextual response for the
+co-pilot.
+The security model, illustrated in Figure 3, is built upon JWT tokens and RLS, ensuring all data
+access is scoped to the user's company and role.
+
+25
+
+Figure 3: Authentication, Authorization, and Data Flow
+4.5 Critical System Flows
+4.5.1 Route Optimization Orchestration
+The route optimization process, detailed in Figure 4, begins when a dispatcher selects a set of
+tasks and triggers the optimization. The client calls the optimize-route Edge Function, which
+fetches task details, calls the Mapbox Optimization API, and persists the optimized sequence
+and ETAs to the database. Real-time subscriptions notify the relevant driver's mobile app of the
+new assignment.
+
+26
+
+Figure 4: Route Optimization Sequence
+4.5.2 LLM Co-Pilot Interaction with Grounding
+To prevent hallucinations, the LLM co-pilot is provided with relevant operational context before
+generating a response. As shown in Figure 5, when a driver asks a question, the chat-interaction
+function first retrieves the driver's active route, tasks, and ETAs from the database. This context
+is injected into the prompt sent to the OpenAI API, resulting in a factual and actionable response
+that cites its sources (e.g., task IDs).
+
+Figure 5: Context-Grounded LLM Interaction
+4.5.3 Offline Operation and Synchronization
+
+27
+
+The Flutter mobile app is designed with an offline-first architecture. As illustrated in Figure 6,
+the app caches active routes and tasks locally. User actions performed offline (e.g., updating a
+task status) are queued in a local outbox. Upon reconnection, the sync engine uploads the
+queued actions, and any conflicts are resolved based on predefined policies (e.g., server-side
+data takes precedence for certain fields, while a driver's "task completed" status may override a
+stale server state).
+
+Figure 6: Mobile App Connectivity State Management
+4.6 Security, Observability, and Performance
+The system architecture described enforces security through multiple layers. All data access is
+controlled by RLS. Secrets are exclusively stored and used within Edge Functions. Input
+validation is performed at the function boundaries, and the LLM prompts are hardened to
+prevent role escalation or data leakage.
+4.7 Summary
+The proposed architecture for OrderVista effectively blends a BaaS-centric core with targeted
+serverless functions to create a scalable, secure, and feature-rich logistics software platform. It
+directly supports the project's core aims: VRP-based optimization, real-time responsiveness,
+offline resilience, and an intelligent LLM co-pilot. The design provides a clear and maintainable
+blueprint for development, from the MVP to a production-ready system.
+
+28
+
+5. Implementation Plan and Milestones
+This section delineates the structured approach for implementing the core capabilities of
+OrderVista within the scope of Interim Report 1 (IR1). The plan adopts a pragmatic, iterative
+methodology that emphasizes incremental development of vertical, end-to-end feature slices.
+The primary focus is on establishing foundational robustness in critical areas. This includes data
+security, offline functionality, and route sequencing, while ensuring the delivery of a
+demonstrable and coherent prototype. Milestones are framed as achievable targets that reflect
+the project's intent and methodological approach.
+5.1 Work Breakdown and Timeline
+The following implementation trajectory is organized into seven sequential phases, each
+designed to build upon the last and reduce the overall technical risk early in the development
+cycle.
+1. Phase A: Foundations and Access Control will establish the core system infrastructure.
+This involves initializing the code repositories, setting up continuous integration checks
+(i.e. via GitHub), and defining the essential data entities (tenants, users, vehicles, tasks,
+routes). A central outcome of this phase is the implementation of role-based access
+control and data partitioning to ensure multi-tenant security from the outset. The result
+will be a secure and authenticated system with seeded development data and a minimal
+dispatcher interface for entity management.
+2. Phase B: Driver App MVP focuses on developing the core of the mobile application.
+This phase will implement an offline-first architecture, featuring a local task cache, an
+outbox for queuing actions during disconnection, and the integration of barcode/QR
+scanning with local photo capture. The outcome will be a functional driver application
+that can view and update tasks reliably, even with intermittent connectivity.
+3. Phase C: Eventually, dispatcher Ingest and Management shifts focus to the web
+dashboard. This phase will enable dispatchers to import orders via CSV with integrated
+
+29
+
+geocoding, provide full task CRUD (Create, Read, Update, Delete) capabilities, and
+establish real-time status propagation. The result is an operational dispatcher portal
+capable of managing the order-to-task lifecycle.
+4. Phase D: Route Sequencing and Persistence introduces the first layer of optimization.
+This phase will implement a baseline sequencing algorithm, such as a nearest-next
+heuristic, and persist the resulting routes, stop orders, and estimated arrival times. The
+outcome is a complete round-trip flow: from order import to sequenced route
+assignment, which is visible to both the dispatchers and the drivers.
+5. Phase E: Telemetry and Geofence Automation enhances the system with situational
+awareness. By ingesting device location updates and computing proximity to task
+locations, the system will suggest or automatically advance task statuses based on
+conservative rules, with provisions for dispatcher override. This phase delivers
+automated status transitions backed by traceable audit logs.
+6. Phase F: Proof-of-Delivery and Media Handling formalizes the completion of tasks. It
+will implement a secure, presigned upload flow for images, attach proof-of-delivery
+(PoD) artifacts to tasks, and store barcode scan data. The outcome would be a secure,
+end-to-end PoD process that is reviewable within the dispatcher portal.
+7. Phase G: Stabilization and Demonstration constitutes the final preparation for IR1. This
+phase involves adding structured logging and metrics for critical paths, exercising a
+complete end-to-end smoke test, and preparing all necessary demonstration artifacts,
+including a script and supporting documentation.
+5.2 Verification and Acceptance Criteria
+Each phase concludes with verifiable checks that serve as pragmatic acceptance indicators,
+ensuring the project remains on track and meets its technical objectives. The idea is further
+elaborated as follows:
+
+30
+1.
+
+Foundations: The data model must enforce tenant partitioning; seed scripts must
+successfully create example data; and basic audit trails must be functional.
+
+2.
+
+Driver App MVP: The application must display tasks from cache, successfully
+synchronize queued updates after a disconnection, and locally capture barcode and photo
+data.
+
+3.
+
+Dispatcher Ingest: The system must complete a CSV import of a sample order set (100200 orders) with geocoding, making tasks visible and manageable across dispatcher and
+driver interfaces.
+
+4.
+
+Route Sequencing: The baseline sequencer must produce a logical stop order for a 10-20
+stop set, with the resulting route and ETAs persisted and visible in the user interfaces.
+
+5.
+
+Telemetry and Geofencing: Simulated device telemetry must trigger proximity-based
+status suggestions under defined rules, with all actions logged and overrideable by an
+active dispatcher.
+
+6.
+
+Proof-of-Delivery: The system must demonstrate a complete PoD flow: image upload via
+a presigned URL, storage of barcode data, and reviewer access to artifacts with enforced
+link expiration.
+
+7.
+
+Stabilization: A final, full “smoke-test” must validate the integrated workflow from
+import to PoD, with operational logging and a prepared demonstration script.
+
+5.3 Testing Strategy
+The testing strategy is designed to provide confidence in the system's reliability while respecting
+the constraints of a single-developer project. It focuses on critical paths and reproducibility.
+Unit-level testing will validate core data transformations, such as geocoding parsing and
+distance calculations, and verify the correctness of authorization rules. Integration testing will
+exercise key cross-component flows, including media uploads, the telemetry-to-geofence event
+chain, and the CSV import process. Finally, a scripted end-to-end smoke test will validate the
+complete user journey, from dispatcher import and assignment to driver execution and proof-of-
+
+31
+
+delivery, including a scenario with simulated network disruption. This will be supported by
+tooling including version control, basic CI pipelines, seeded datasets, and a telemetry simulator.
+5.4 Risk Mitigation
+The plan presented in this paper proactively addresses common risks in logistics application
+development with pragmatic mitigation strategies. Here are some of those main risk mitigation
+strategies:
+1.
+
+External Service Dependency: Variability in geocoding, mapping, and optimization APIs
+will be mitigated by caching results, maintaining a simple local sequencing fallback, and
+implementing rate limiting.
+
+2.
+
+Offline Conflict Resolution: Potential data conflicts during re-synchronization will be
+managed through deterministic merge rules, clear conflict flags, and simple correction
+workflows within the dispatcher UI.
+
+3.
+
+Data Privacy: Security for handled media will be enforced via presigned URLs with
+short time-to-live (TTL), tenant-scoped storage paths, and configurable data retention
+policies.
+
+4.
+
+Scope Management: To guard against schedule pressure, development will prioritize
+end-to-end functionality over non-essential features, deferring advanced UI polish and
+treating Optical Character Recognition (OCR) as an exploratory, non-blocking stretch
+goal.
+
+5.
+
+Device Limitations: Challenges with location accuracy and background operation will be
+addressed by using conservative geofencing thresholds, providing manual status
+overrides, and maintaining clear documentation for required device settings.
+6. Preliminary Evaluation Plan
+
+This section outlines the methodology for the preliminary evaluation of OrderVista within the
+scope of Interim Report 1 (IR1). The plan is designed to be pragmatic and repeatable, focusing
+on establishing measurable baselines and instrumentation for the system's core capabilities. The
+
+32
+
+evaluation will assess performance against key criteria which includes routing efficiency, system
+responsiveness, offline robustness, and proof-of-delivery integrity. All of this has to be done
+using synthetic datasets and scripted procedures suitable for a single-developer project. The
+foundational work presented in this paper will enable more comprehensive measurement and
+field testing in subsequent project phases.
+6.1 Evaluation Objectives and Metrics
+The evaluation is structured around four primary objectives, each with defined metrics that align
+directly with the research questions posed in the methodology. They are as follows:
+1. Routing Efficiency: The primary objective is to quantitatively assess the performance of
+the implemented route sequencing algorithm against a established baseline. The key
+metrics are the relative reduction in total route duration (percentage) compared to a
+simple nearest-next baseline for test sets of 10-20 stops, and the average deviation in
+minutes from estimated arrival times. Evidence will be generated through route
+summaries, comparative tables, and visualizations of the planned paths.
+2. System Responsiveness: This objective seeks to characterize the latency of the system
+under light load conditions. Metrics include the 95th percentile (p95) latency for
+common CRUD API endpoints (e.g., task creation, status updates), the p95 latency for
+optimization requests handling up to 20 stops, and the completion time for small image
+uploads via the presigned URL flow. Data will be gathered from structured server and
+client logs with high-resolution timestamps.
+3. Offline Robustness: The goal is to empirically observe the system's behavior during
+planned network disconnections and its subsequent recovery. Success will be measured
+by the task update preservation rate (the percentage of user actions successfully
+synchronized after a ~10-minute disconnection), the time to consistency postreconnection, and the count and resolution outcome of any data conflicts. Evidence will
+be collected from logs of scripted disconnection scenarios.
+
+33
+
+4. Proof-of-Delivery Integrity: This objective is to validate the reliability of the PoD
+process under typical operational conditions. Metrics include the success rate of
+barcode/QR scans under standard indoor lighting, the success rate and timing of image
+uploads, and the availability of PoD records for dispatcher review within a short
+timeframe. If Optical Character Recognition (OCR) is prototyped, its precision, recall,
+and F1 score on a small sample set will be calculated indicatively.
+Additionally, lightweight Reliability Indicators will be monitored throughout all tests, including
+crash-free driver sessions and API error rates, to provide a baseline assessment of system
+stability.
+6.2 Datasets, Baselines, and Test Scenarios
+To ensure repeatability and control, the evaluation will utilize synthesized artifacts and
+established baselines.
+1. Synthetic Order Sets: Two to three synthetic datasets representing urban delivery scenarios in
+Hong Kong will be generated. These sets, comprising 10, 20, and 50 stops with plausible
+coordinates, time windows, and service durations, provide a controllable and privacy-preserving
+method to exercise the full system workflow.
+2. Baseline Methods: The primary baseline for routing efficiency will be a nearest-next (greedy)
+sequencing algorithm using Haversine distance. This establishes a clear, minimal benchmark
+against which the performance of more advanced sequencing (e.g., a local search heuristic or
+external API) can be compared.
+3. Telemetry Simulation: A basic replay tool will be developed to simulate device location
+updates along planned routes. This allows for the reproducible testing of geofencing and status
+automation without the logistical overhead of initial field trials.
+4. Barcode and PoD Samples: A small corpus of generated barcode and QR labels, along with
+package photos taken under typical lighting conditions, will be used for PoD integrity tests.
+
+34
+
+6.3 Evaluation Procedures
+Moreover, structured, scripted procedures will be employed to ensure the consistency and
+repeatability of all tests.
+
+
+Routing Efficiency: A script will load a synthetic order set, generate a route using the
+baseline method, then generate a route using the OrderVista system. The total duration,
+distance, and schedule adherence of both routes will be recorded and compared.
+
+
+
+System Responsiveness: A short load-simulation script will perform bursts of CRUD
+operations, invoke the optimization endpoint, and upload small images. Client and server
+timestamps will be used to compute percentile latencies.
+
+
+
+Offline Robustness: A controlled test will involve starting a route on the mobile app,
+disabling network connectivity for approximately ten minutes while updates are made,
+and then reconnecting to observe the synchronization process, measuring its duration and
+identifying any conflicts.
+
+
+
+Proof-of-Delivery Integrity: This procedure will involve repeated scanning of sample
+barcodes, followed by the capture and upload of PoD images. If OCR is implemented, its
+output on a labeled image set will be compared to ground-truth data.
+
+6.4 Instrumentation, Analysis, and Reporting
+Instrumentation will be implemented through structured logging with correlation IDs across
+client and server components, alongside minimal metric counters for key system endpoints. Data
+handling will adhere to privacy conscious principles, using tenant-scoped test data, short-lived
+access links for media, and the anonymization of any visual evidence used in reporting.
+Analysis and reporting will emphasize clarity and traceability. For each objective, a compact
+summary of metrics will be presented alongside a qualitative interpretation of the results, noting
+observed bottlenecks or stability concerns. Supporting visuals will include route plots from the
+dispatcher dashboard and latency distribution charts. The report will explicitly acknowledge
+the limitations of this preliminary evaluation, including the use of synthetic data, simplified
+
+35
+
+traffic assumptions, and controlled load conditions, while highlighting how the established
+instrumentation paves the way for more rigorous evaluation in future work.
+6.5 Risk Mitigation
+The proposed evaluation plan incorporates mitigations for several identified risks as follows:
+1. Synthetic-to-Real Gap: The use of realistic urban coordinates and time windows, coupled
+with clear documentation of assumptions, will help bridge the gap between simulation
+and real-world operation.
+2. Device Variability: Tests will specify device settings and be repeated under consistent
+conditions, with device models and OS versions logged to contextualize results.
+3. External Service Dependence: Caching of geocoding results and the retention of a local
+sequencing baseline will ensure the evaluation can proceed reliably.
+4. Limited Sample Sizes: The focus will be on demonstrating repeatable procedures and
+observable trends rather than producing statistically significant point estimates, with a
+plan to expand sample sizes in subsequent project phases.
+6.6 Conclusion
+This interim report establishes the practical development path toward OrderVista, a secure,
+offline-capable, AI-assisted logistics platform specifically designed for Hong Kong. A
+significant gap in the current landscape is identified: the absence of a unified, user-focused
+solution that integrates VRP-based routing, real-time situational awareness, and conversational
+guidance. The proposed architecture, comprising Supabase/PostGIS, Edge Functions, Mapbox,
+and an LLM-powered copilot, is constructed to address these needs. Interim Report I emphasizes
+demonstrable vertical integration, with evaluation targeting routing efficiency, responsiveness,
+offline reliability, and proof-of-delivery data integrity. With risk controls implemented, the
+immediate priorities are to complete task sequencing, strengthen security monitoring, and
+systematically enhance both the copilot and dynamic re-optimization functions, moving the
+platform from its minimum viable product stage toward production readiness.
+
+36
+
+Reference List
+Adamopoulou, E., & Moussiades, L. (2020). An overview of chatbot technology. In IFIP
+International Conference on Artificial Intelligence Applications and Innovations (pp.
+373–383). Springer.
+Addepto. (2025, September 9). Top 15 LLM use cases in 2025: Boost your business with
+AI. https://addepto.com/blog/llm-use-cases-for-business/
+Aiola. (2025, July 17). Conversational AI for logistics: Transforming warehouse’s
+efficiency. https://aiola.ai/blog/conversational-ai-for-logistics/
+Aman, R., Rajeevan, P. V., Rajan, A., & Anitha, R. (2025). AI-assisted query generation for
+business intelligence applications. International Journal of Engineering Research &
+Technology, 14(4), Article 440. https://www.ijert.org/research/ai-assisted-querygeneration-for-business-intelligence-applications-IJERTV14IS040440.pdf
+Apdullah, A. R., Jihadi, M., & Tarim, A. (2021). The effect of work stress and workload on
+turnover intention with work fatigue as an intervening variable for expedition service
+couriers. Journal of Industrial Engineering & Management Research, 2(5), 1–13.
+Baryannis, G., Dani, S., & Antoniou, G. (2019). Predictive analytics and artificial intelligence in
+supply chain management. Computers & Industrial Engineering, 137,
+106024. https://doi.org/10.1016/j.cie.2019.106024
+Bertazzi, L., Golden, B. L., & Wang, X. (2015). Min–max vs. min–sum vehicle routing: A
+worst-case analysis. European Journal of Operational Research, 240(2), 372–
+381. https://doi.org/10.1016/j.ejor.2014.07.049
+Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., ... & Amodei, D.
+(2020). Language models are few-shot learners. Advances in Neural Information
+Processing Systems, 33, 1877–1901. https://arxiv.org/abs/2005.14165
+
+37
+
+Brynjolfsson, E., Li, D., & Raymond, L. R. (2023). Generative AI and the new economics of
+ideas (Harvard Business School Technology & Operations Management Unit Working
+Paper No. 24-003). Harvard Business School.
+Carlsson, J., & Devulapalli, R. (2006). Algorithms for the minimax transportation
+problem. Naval Research Logistics, 53(1), 41–54. https://doi.org/10.1002/nav.20131
+Clerk Chat. (2025, February 18). How to use conversational AI for logistics to improve
+efficiency and customer service. https://clerk.chat/blog/conversational-ai-forlogistics/
+Dantzig, G. B., & Ramser, J. H. (1959). The truck dispatching problem. Management Science,
+6(1), 80–91. https://doi.org/10.1287/mnsc.6.1.80
+Dorigo, M., & Gambardella, L. M. (1997). Ant colonies for the travelling salesman
+problem. Biosystems, 43(2), 73–81. https://doi.org/10.1016/s0303-2647(97)01708-5
+Erdoğan, S., & Miller-Hooks, E. (2012). A green vehicle routing problem. Transportation
+Research Part E: Logistics and Transportation Review, 48(1), 100–
+114. https://doi.org/10.1016/j.tre.2011.08.001
+Flachsbart, B. B., Elrod, C. C., & Hilgers, M. G. (2013). Are HCI issues a big factor in supply
+chain mobile apps? In Human Interface and the Management of Information.
+Information and Interaction for Learning, Culture, Collaboration and Business (Vol.
+8018, pp. 450–456). Springer. https://doi.org/10.1007/978-3-642-39226-9_49
+Gupshup. (2022, February). How conversational AI is disrupting logistics & supply chain
+industry. https://www.gupshup.ai/resources/wpcontent/uploads/2022/02/How_Conversational_AI_Is_Disrupting_Logistics__Suppl
+y_Chain_Industry.pdf
+Harish, A., & Meena, S. (2025). Review of GPS-based monitoring systems for agricultural
+custom hiring centers: Opportunities, limitations, and practical solutions. Archives of
+
+38
+
+Current Research International, 25(10), 197–
+203. https://doi.org/10.9734/acri/2025/v25i1034791
+Hart, P. E., Nilsson, N. J., & Raphael, B. (1968). A formal basis for the heuristic determination
+of minimum cost paths. IEEE Transactions on Systems Science and Cybernetics, 4(2),
+100–107. https://doi.org/10.1109/TSSC.1968.300136
+He, Y., & Chan, Y. Y. (2016). Dead-reckoning based smartphone positioning in
+tunnels. Sensors, 16(8), 1296. https://doi.org/10.3390/s16081296
+Herrera, J. C., Work, D. B., Herring, R., Ban, X. J., Jacobson, Q., & Bayen, A. M. (2010).
+Evaluation of traffic data obtained via GPS-enabled mobile phones: The Mobile Century
+field experiment. Transportation Research Part C: Emerging Technologies, 18(4), 568–
+583. https://doi.org/10.1016/j.trc.2009.10.006
+Hong Kong Productivity Council. (2022). Logistics 4.0 maturity level protocol for
+manufacturing and trading industry. SME Development
+Fund. https://www.smefund.tid.gov.hk/english/sdf/deliverables/d17004003_maturity
+levelprotocol_manufacturing_trading.pdf
+Hostinger. (2025, June 30). LLM statistics 2025: Adoption, trends, and market
+insights. https://www.hostinger.com/tutorials/llm-statistics
+Irnich, S., & Desaulniers, G. (2005). Shortest path problems with resource constraints. In G.
+Desaulniers, J. Desrosiers, & M. M. Solomon (Eds.), Column Generation (pp. 33–65).
+Springer. https://doi.org/10.1007/0-387-25486-2_2
+Jain, R., Dhingra, S., Joshi, K., Rana, A. K., & Goyal, N. (2023). Enhance traffic flow prediction
+with real-time vehicle data integration. Journal of Artificial Intelligence, 6(2), Article
+574. https://doi.org/10.32629/jai.v6i2.574
+Knight Frank. (2025, January 31). Asia Pacific logistics highlights – H1
+2025. https://www.knightfrank.com.hk/research/asia-pacific-logistics-highlights12306.aspx
+
+39
+
+Krishnamoorthy, G., Kurkute, M. V., & Sreerama, J. (2024). Integrating LLMs into AI-driven
+supply chains: Best practices for training, development, and deployment in the retail and
+manufacturing industries. Journal of AI, Robotics & Automation, 3(1), 1–15.
+Laporte, G. (2009). Fifty years of vehicle routing. Transportation Science, 43(4), 408–
+416. https://doi.org/10.1287/trsc.1090.0301
+Legislative Council of the Hong Kong Special Administrative Region. (2024, June 12).
+Logistics industry in Hong
+Kong. https://app7.legco.gov.hk/rpdb/en/uploads/2024/ISSH/ISSH13_2024_2024061
+2_en.pdf
+Li, B., Mellou, K., Zhang, B., Pathuri, J., & Menache, I. (2023). Large language models for
+supply chain optimization. Microsoft Research. https://www.microsoft.com/enus/research/publication/large-language-models-for-supply-chain-optimization/
+Maiti, T. K. (2024). Application of large language models (LLMs) for supply chain
+optimization. International Journal of Scientific Research in Engineering and
+Management, 8(5), 1–10.
+Mordor Intelligence. (2025, September 29). Hong Kong freight and logistics market size &
+share analysis – Growth trends and
+forecasts. https://www.mordorintelligence.com/industry-reports/hong-kong-freightlogistics-market-study
+OpenStreetMap Wiki. (2016, April 30).
+MBTiles. https://wiki.openstreetmap.org/wiki/MBTiles
+Redmon, J., Divvala, S., Girshick, R., & Farhadi, A. (2016). You only look once: Unified, realtime object detection. In Proceedings of the IEEE Conference on Computer Vision and
+Pattern Recognition (CVPR) (pp. 779–788). https://doi.org/10.1109/CVPR.2016.91
+
+40
+
+Renaudin, V., Afzal, M. H., El-Sheimy, N., Lachapelle, G., & Landry, R. (2012). Complete
+triaxis inertial navigation in GPS-denied urban environment. Sensors, 12(10), 13204–
+13223. https://doi.org/10.3390/s121013204
+Taniguchi, E., Thompson, R. G., Yamada, T., & Van Duin, R. (2001). City logistics: Network
+modelling and intelligent transport systems. Pergamon.
+Toth, P., & Vigo, D. (Eds.). (2002). The vehicle routing problem. Society for Industrial and
+Applied Mathematics. https://doi.org/10.1137/1.9780898718515
+Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., &
+Polosukhin, I. (2017). Attention is all you need. In Advances in Neural Information
+Processing Systems, 30. https://arxiv.org/abs/1706.03762
+Vlahogianni, E. I., Karlaftis, M. G., & Golias, J. C. (2014). Short-term traffic forecasting: Where
+we are and where we’re going. Transportation Research Part C: Emerging
+Technologies, 43, 3–19. https://doi.org/10.1016/j.trc.2014.01.005
+Wang, G., Zhang, Y., Zhao, J., Zhang, J., Jiang, F., Zhu, M., Chen, H., Sui, Y., & Deng, S.
+(2025). Integrating large language models with network optimization for interactive and
+explainable supply chain planning. arXiv. https://arxiv.org/abs/2508.21622
+Yuen, K. F., Wang, X., Ng, L. T. W., & Wong, Y. D. (2018). The prospects of different lastmile delivery modes of e-commerce logistics in Hong Kong. Transportation Research
+Record, 2672(9), 104–112. https://doi.org/10.1177/0361198118792336
+
+

@@ -1,6 +1,4 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/delivery_task.dart';
 
@@ -14,59 +12,105 @@ class TaskApiException implements Exception {
 }
 
 class TaskService {
-  TaskService({http.Client? httpClient, String? baseUrl})
-      : _client = httpClient ?? http.Client(),
-        _baseUrl = baseUrl ?? _defaultBaseUrl;
+  TaskService({
+    required SupabaseClient client,
+    required String companyId,
+    required String driverId,
+  })  : _client = client,
+        _companyId = companyId,
+        _driverId = driverId;
 
-  static const String _defaultBaseUrl = 'http://localhost:3000';
+  final SupabaseClient _client;
+  final String _companyId;
+  final String _driverId;
 
-  final http.Client _client;
-  final String _baseUrl;
-
-  Uri _resolve(String path) => Uri.parse('$_baseUrl$path');
-
-  /// Fetches tasks from the backend. Throws [TaskApiException] on failure.
   Future<List<DeliveryTask>> fetchTasks() async {
-    final response = await _client.get(_resolve('/tasks'));
-    if (response.statusCode != 200) {
-      throw TaskApiException(
-        'Unable to load tasks (status ${response.statusCode}).',
-      );
-    }
-
+    _assertConfiguration();
     try {
-      final List<dynamic> payload = jsonDecode(response.body) as List<dynamic>;
-      return payload
-          .map((e) => DeliveryTask.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final result = await _client
+          .from('tasks')
+          .select()
+          .eq('company_id', _companyId)
+          .eq('driver_id', _driverId)
+          .order('scheduled_start', ascending: true);
+
+      final rows = result as List<dynamic>;
+      return rows.map((row) => _mapRow(row as Map<String, dynamic>)).toList();
+    } on PostgrestException catch (error) {
+      throw TaskApiException(
+        error.message.isNotEmpty
+            ? error.message
+            : 'Supabase error (${error.code}).',
+      );
     } catch (error) {
-      throw TaskApiException('Unexpected response format: $error');
+      throw TaskApiException('Unexpected Supabase error: $error');
     }
   }
 
-  /// Marks a task as complete by calling the backend.
   Future<void> completeTask(
     String taskId, {
     String? proofCode,
   }) async {
-    final response = await _client.post(
-      _resolve('/tasks/complete'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(
-        {
-          'taskId': taskId,
-          if (proofCode != null && proofCode.isNotEmpty) 'proofCode': proofCode,
-        },
-      ),
-    );
+    _assertConfiguration();
+    final payload = <String, dynamic>{
+      'status': 'delivered',
+      if (proofCode != null && proofCode.isNotEmpty) 'proof_code': proofCode,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
 
-    if (response.statusCode != 200) {
+    try {
+      final response = await _client
+          .from('tasks')
+          .update(payload)
+          .eq('company_id', _companyId)
+          .eq('driver_id', _driverId)
+          .eq('id', taskId)
+          .select('id')
+          .maybeSingle();
+
+      if (response == null) {
+        throw TaskApiException('Task $taskId was not found for this driver.');
+      }
+    } on PostgrestException catch (error) {
       throw TaskApiException(
-        'Failed to update task $taskId (status ${response.statusCode}).',
+        error.message.isNotEmpty
+            ? error.message
+            : 'Supabase error (${error.code}).',
+      );
+    } catch (error) {
+      throw TaskApiException('Unexpected Supabase error: $error');
+    }
+  }
+
+  List<DeliveryTask> demoTasks() => DeliveryTask.sampleTasks();
+
+  void _assertConfiguration() {
+    if (_companyId.isEmpty || _driverId.isEmpty) {
+      throw TaskApiException(
+        'Supabase company/driver identifiers are not configured.',
       );
     }
   }
 
-  /// Provides sample data for offline demos or early iterations.
-  List<DeliveryTask> demoTasks() => DeliveryTask.sampleTasks();
+  DeliveryTask _mapRow(Map<String, dynamic> row) {
+    return DeliveryTask(
+      id: row['id']?.toString() ?? '',
+      address: row['address']?.toString() ?? 'Unknown address',
+      status: row['status']?.toString() ?? 'pending',
+      scheduledAt: _parseDate(row['scheduled_start']),
+      proofCode: row['proof_code']?.toString(),
+    );
+  }
+
+  DateTime? _parseDate(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is DateTime) {
+      return value.toLocal();
+    }
+
+    return DateTime.tryParse(value.toString())?.toLocal();
+  }
 }

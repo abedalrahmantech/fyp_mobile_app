@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_theme.dart';
+import '../../config/app_config.dart';
 import '../../models/delivery_task.dart';
+import '../../services/mapbox_service.dart';
 import '../../viewmodels/task_view_model.dart';
 
 class TaskListScreen extends StatefulWidget {
@@ -66,6 +69,7 @@ class _TaskListBody extends StatelessWidget {
                   isOffline: viewModel.isOffline,
                   lastCacheUpdate: viewModel.lastCacheUpdate,
                 ),
+              const _EngineerCredit(),
               if (tasks.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 120),
@@ -93,6 +97,7 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final config = context.read<AppConfig>();
     final statusColor = AppTheme.statusColor(task.status);
     final theme = Theme.of(context);
 
@@ -137,6 +142,16 @@ class _TaskCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 16),
+            _TaskMapPreview(
+              address: task.address,
+              mapboxToken: config.mapboxAccessToken,
+              countryCode: config.mapboxCountryCode,
+              proximity: GeoPoint(
+                lat: config.mapboxProximityLat,
+                lng: config.mapboxProximityLng,
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -384,6 +399,148 @@ class _PendingSyncBanner extends StatelessWidget {
           icon: const Icon(Icons.sync),
           label: const Text('Sync'),
         ),
+      ),
+    );
+  }
+}
+
+class _EngineerCredit extends StatelessWidget {
+  const _EngineerCredit();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        'Built by Abed Al Rahman • City University of Hong Kong',
+        style: theme.textTheme.bodySmall?.copyWith(color: Colors.blueGrey),
+      ),
+    );
+  }
+}
+
+class _TaskMapPreview extends StatefulWidget {
+  const _TaskMapPreview({
+    required this.address,
+    required this.mapboxToken,
+    required this.countryCode,
+    required this.proximity,
+  });
+
+  final String address;
+  final String mapboxToken;
+  final String countryCode;
+  final GeoPoint proximity;
+
+  @override
+  State<_TaskMapPreview> createState() => _TaskMapPreviewState();
+}
+
+class _TaskMapPreviewState extends State<_TaskMapPreview> {
+  Future<GeoPoint?>? _future;
+  MapboxService? _service;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.mapboxToken.isNotEmpty) {
+      _service = MapboxService(
+        widget.mapboxToken,
+        countryCode: widget.countryCode,
+        proximity: widget.proximity,
+      );
+      _future = _service!.forwardGeocode(widget.address);
+    }
+  }
+
+  @override
+  void dispose() {
+    _service?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.mapboxToken.isEmpty) {
+      return const _MapPlaceholder(message: 'Mapbox token missing.');
+    }
+
+    return FutureBuilder<GeoPoint?>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _MapPlaceholder(message: 'Loading map...');
+        }
+
+        if (snapshot.hasError) {
+          return const _MapPlaceholder(message: 'Map unavailable.');
+        }
+
+        final point = snapshot.data;
+        if (point == null) {
+          return const _MapPlaceholder(
+              message: 'No location found for this address.');
+        }
+
+        final url = _service!.staticMapUrl(point);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                url,
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _openInMaps(point),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Open in Maps'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _openInMaps(GeoPoint point) async {
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${point.lat},${point.lng}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+}
+
+class _MapPlaceholder extends StatelessWidget {
+  const _MapPlaceholder({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 180,
+      width: double.infinity,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Text(
+        message,
+        style: theme.textTheme.bodySmall,
       ),
     );
   }
