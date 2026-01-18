@@ -19,6 +19,11 @@ class AppConfig {
   });
 
   factory AppConfig.fromEnv() {
+    final openRouterKey =
+        const String.fromEnvironment('OPENROUTER_API_KEY', defaultValue: '');
+    final openAiKey =
+        const String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
+
     return AppConfig(
       supabaseUrl: const String.fromEnvironment('SUPABASE_URL'),
       supabaseAnonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
@@ -45,8 +50,7 @@ class AppConfig {
             defaultValue: '114.1750'),
         fallback: 114.1750,
       ),
-      openRouterApiKey:
-          const String.fromEnvironment('OPENROUTER_API_KEY', defaultValue: ''),
+      openRouterApiKey: openRouterKey.isNotEmpty ? openRouterKey : openAiKey,
       openRouterBaseUrl: const String.fromEnvironment(
         'OPENROUTER_BASE_URL',
         defaultValue: 'https://openrouter.ai/api/v1',
