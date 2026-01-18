@@ -62,8 +62,9 @@ class AiService {
       return 'There are no delivery tasks.';
     }
 
-    final buffer = StringBuffer('Summarize these delivery tasks in Hong Kong:
-');
+    final buffer = StringBuffer(
+      'Summarize these delivery tasks in Hong Kong:\n',
+    );
     for (final task in tasks.take(20)) {
       buffer.writeln(
         '- ${task.id}: ${task.address} • status=${task.status} • scheduled=${task.scheduledAt ?? 'unscheduled'}',
