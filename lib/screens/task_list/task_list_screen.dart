@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/app_theme.dart';
 import '../../config/app_config.dart';
 import '../../models/delivery_task.dart';
+import '../../services/ai_service.dart';
 import '../../services/mapbox_service.dart';
 import '../../viewmodels/task_view_model.dart';
 
@@ -17,6 +18,8 @@ class TaskListScreen extends StatefulWidget {
 }
 
 class _TaskListScreenState extends State<TaskListScreen> {
+  bool _aiLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -30,12 +33,73 @@ class _TaskListScreenState extends State<TaskListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('OrderVista Dispatch'),
-        actions: const [
-          _LastSyncedIndicator(),
+        actions: [
+          IconButton(
+            tooltip: 'AI summary',
+            onPressed: _aiLoading ? null : _runAiSummary,
+            icon: _aiLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.bolt_outlined),
+          ),
+          const _LastSyncedIndicator(),
         ],
       ),
       body: const _TaskListBody(),
     );
+  }
+
+  Future<void> _runAiSummary() async {
+    final viewModel = context.read<TaskViewModel>();
+    final config = context.read<AppConfig>();
+
+    if (config.openRouterApiKey.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Set OPENROUTER_API_KEY in .env to use AI.')),
+      );
+      return;
+    }
+
+    setState(() => _aiLoading = true);
+    try {
+      final service = AiService(
+        apiKey: config.openRouterApiKey,
+        baseUrl: config.openRouterBaseUrl,
+        model: config.openRouterModel,
+      );
+      final summary = await service.summarizeTasks(viewModel.tasks);
+      service.dispose();
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('AI Summary'),
+            content: SingleChildScrollView(child: Text(summary ?? 'No summary.')),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('AI error: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _aiLoading = false);
+      }
+    }
   }
 }
 

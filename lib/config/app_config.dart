@@ -8,6 +8,9 @@ class AppConfig {
     required this.mapboxCountryCode,
     required this.mapboxProximityLat,
     required this.mapboxProximityLng,
+    required this.openRouterApiKey,
+    required this.openRouterBaseUrl,
+    required this.openRouterModel,
     required this.telemetryEndpoint,
     required this.dispatchPortalUrl,
     required this.environment,
@@ -42,6 +45,16 @@ class AppConfig {
             defaultValue: '114.1750'),
         fallback: 114.1750,
       ),
+      openRouterApiKey:
+          const String.fromEnvironment('OPENROUTER_API_KEY', defaultValue: ''),
+      openRouterBaseUrl: const String.fromEnvironment(
+        'OPENROUTER_BASE_URL',
+        defaultValue: 'https://openrouter.ai/api/v1',
+      ),
+      openRouterModel: const String.fromEnvironment(
+        'OPENROUTER_MODEL',
+        defaultValue: 'openai/gpt-4o-mini',
+      ),
       telemetryEndpoint: const String.fromEnvironment(
         'ORDERVISTA_TELEMETRY_ENDPOINT',
         defaultValue: '',
@@ -73,6 +86,9 @@ class AppConfig {
   final String mapboxCountryCode;
   final double mapboxProximityLat;
   final double mapboxProximityLng;
+  final String openRouterApiKey;
+  final String openRouterBaseUrl;
+  final String openRouterModel;
   final String telemetryEndpoint;
   final String dispatchPortalUrl;
   final String environment;
@@ -90,6 +106,9 @@ class AppConfig {
     String? mapboxCountryCode,
     double? mapboxProximityLat,
     double? mapboxProximityLng,
+    String? openRouterApiKey,
+    String? openRouterBaseUrl,
+    String? openRouterModel,
     String? telemetryEndpoint,
     String? dispatchPortalUrl,
     String? environment,
@@ -105,6 +124,9 @@ class AppConfig {
       mapboxCountryCode: mapboxCountryCode ?? this.mapboxCountryCode,
       mapboxProximityLat: mapboxProximityLat ?? this.mapboxProximityLat,
       mapboxProximityLng: mapboxProximityLng ?? this.mapboxProximityLng,
+      openRouterApiKey: openRouterApiKey ?? this.openRouterApiKey,
+      openRouterBaseUrl: openRouterBaseUrl ?? this.openRouterBaseUrl,
+      openRouterModel: openRouterModel ?? this.openRouterModel,
       telemetryEndpoint: telemetryEndpoint ?? this.telemetryEndpoint,
       dispatchPortalUrl: dispatchPortalUrl ?? this.dispatchPortalUrl,
       environment: environment ?? this.environment,
