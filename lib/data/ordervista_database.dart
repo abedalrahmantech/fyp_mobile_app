@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
+
+import 'connection/native_connection.dart'
+    if (dart.library.html) 'connection/web_connection.dart';
 
 part 'ordervista_database.g.dart';
 
@@ -65,24 +64,16 @@ class DriftSyncQueue extends Table {
 )
 class OrderVistaDatabase extends _$OrderVistaDatabase {
   OrderVistaDatabase({QueryExecutor? executor})
-      : super(executor ?? _openConnection());
+      : super(executor ?? openConnection());
 
   factory OrderVistaDatabase.inMemory() {
-    return OrderVistaDatabase(
-      executor: LazyDatabase(() async {
-        return NativeDatabase.memory();
-      }),
-    );
+    if (kIsWeb) {
+      return OrderVistaDatabase(executor: openMemoryConnection());
+    }
+
+    return OrderVistaDatabase(executor: openMemoryConnection());
   }
 
   @override
   int get schemaVersion => 1;
-}
-
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = p.join(directory.path, 'ordervista.db');
-    return NativeDatabase.createInBackground(File(path));
-  });
 }

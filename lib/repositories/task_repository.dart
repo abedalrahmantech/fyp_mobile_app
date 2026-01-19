@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -8,7 +9,7 @@ import '../services/task_service.dart';
 
 class TaskRepository {
   TaskRepository({
-    required this.database,
+    this.database,
     required this.taskService,
     required this.companyId,
     required this.driverId,
@@ -16,12 +17,21 @@ class TaskRepository {
 
   static const int _maxAttempts = 5;
 
-  final OrderVistaDatabase database;
+  final OrderVistaDatabase? database;
   final TaskService taskService;
   final String companyId;
   final String driverId;
 
+  final StreamController<List<DeliveryTask>> _memoryController =
+      StreamController.broadcast();
+  List<DeliveryTask> _memoryTasks = const [];
+
   Stream<List<DeliveryTask>> watchTasks() {
+    final database = this.database;
+    if (database == null) {
+      return _memoryController.stream;
+    }
+
     final query = database.select(database.driftTasks)
       ..orderBy([
         (tbl) => OrderingTerm(
@@ -46,6 +56,11 @@ class TaskRepository {
   }
 
   Future<int> pendingQueueCount() async {
+    final database = this.database;
+    if (database == null) {
+      return 0;
+    }
+
     final rows = await (database.select(database.driftSyncQueue)
           ..where((row) => row.status.equals('pending')))
         .get();
@@ -61,6 +76,10 @@ class TaskRepository {
       await _applyLocalDelivery(task.id, proofCode: proofCode);
       return const DeliverySyncResult(synced: true, queued: false);
     } catch (_) {
+      if (database == null) {
+        await _applyLocalDelivery(task.id, proofCode: proofCode);
+        return const DeliverySyncResult(synced: false, queued: false);
+      }
       await _enqueueDeliveryCompletion(task, proofCode: proofCode);
       await _applyLocalDelivery(task.id, proofCode: proofCode);
       return const DeliverySyncResult(synced: false, queued: true);
@@ -98,6 +117,19 @@ class TaskRepository {
     String taskId, {
     String? proofCode,
   }) async {
+    final database = this.database;
+    if (database == null) {
+      _memoryTasks = _memoryTasks
+          .map(
+            (task) => task.id == taskId
+                ? task.copyWith(status: 'delivered', proofCode: proofCode)
+                : task,
+          )
+          .toList();
+      _memoryController.add(_memoryTasks);
+      return;
+    }
+
     await (database.update(database.driftTasks)
           ..where((row) => row.id.equals(taskId)))
         .write(
@@ -113,6 +145,11 @@ class TaskRepository {
     DeliveryTask task, {
     String? proofCode,
   }) async {
+    final database = this.database;
+    if (database == null) {
+      return;
+    }
+
     final payload = jsonEncode({
       'taskId': task.id,
       if (proofCode != null && proofCode.isNotEmpty) 'proofCode': proofCode,
@@ -129,6 +166,11 @@ class TaskRepository {
   }
 
   Future<int> syncPendingDeliveries() async {
+    final database = this.database;
+    if (database == null) {
+      return 0;
+    }
+
     final pending = await (database.select(database.driftSyncQueue)
           ..where((row) => row.status.equals('pending'))
           ..orderBy([(row) => OrderingTerm(expression: row.id)]))
@@ -162,6 +204,11 @@ class TaskRepository {
   }
 
   Future<void> _deleteQueueItem(int id) async {
+    final database = this.database;
+    if (database == null) {
+      return;
+    }
+
     await (database.delete(database.driftSyncQueue)
           ..where((row) => row.id.equals(id)))
         .go();
@@ -185,6 +232,11 @@ class TaskRepository {
 
   Future<void> _markQueueItemFailed(int id, int attempts,
       {bool permanent = false}) async {
+    final database = this.database;
+    if (database == null) {
+      return;
+    }
+
     final nextAttempts = permanent ? _maxAttempts : attempts + 1;
     final status =
         permanent || nextAttempts >= _maxAttempts ? 'failed' : 'pending';
@@ -200,6 +252,13 @@ class TaskRepository {
   }
 
   Future<void> _replaceCache(List<DeliveryTask> tasks) async {
+    final database = this.database;
+    if (database == null) {
+      _memoryTasks = tasks;
+      _memoryController.add(_memoryTasks);
+      return;
+    }
+
     await database.transaction(() async {
       await database.delete(database.driftRouteTasks).go();
       await database.delete(database.driftRoutes).go();

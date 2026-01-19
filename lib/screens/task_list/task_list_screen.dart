@@ -59,7 +59,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
     if (config.openRouterApiKey.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Set OPENROUTER_API_KEY in .env to use AI.')),
+        const SnackBar(
+            content: Text('Set OPENROUTER_API_KEY in .env to use AI.')),
       );
       return;
     }
@@ -80,7 +81,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
         builder: (context) {
           return AlertDialog(
             title: const Text('AI Summary'),
-            content: SingleChildScrollView(child: Text(summary ?? 'No summary.')),
+            content:
+                SingleChildScrollView(child: Text(summary ?? 'No summary.')),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),

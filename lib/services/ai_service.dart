@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
 
 import '../models/delivery_task.dart';
@@ -28,6 +30,8 @@ class AiService {
       headers: {
         'Authorization': 'Bearer $apiKey',
         'Content-Type': 'application/json',
+        if (kIsWeb) 'HTTP-Referer': Uri.base.origin,
+        if (kIsWeb) 'X-Title': 'OrderVista Dispatch',
       },
       body: jsonEncode({
         'model': model,
@@ -53,7 +57,8 @@ class AiService {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final choices = body['choices'] as List<dynamic>?;
     if (choices == null || choices.isEmpty) return 'No AI response.';
-    final message = (choices.first as Map<String, dynamic>)['message'] as Map<String, dynamic>?;
+    final message = (choices.first as Map<String, dynamic>)['message']
+        as Map<String, dynamic>?;
     return message?['content'] as String? ?? 'No AI content.';
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -16,7 +17,7 @@ class AppBootstrap {
   );
 
   final AppConfig config;
-  final OrderVistaDatabase database;
+  final OrderVistaDatabase? database;
   final TaskRepository taskRepository;
   final SupabaseClient supabaseClient;
 
@@ -27,7 +28,7 @@ class AppBootstrap {
     final config = AppConfig.fromEnv();
     await _ensureSupabase(config);
     final supabaseClient = Supabase.instance.client;
-    final database = OrderVistaDatabase();
+    final database = kIsWeb ? null : OrderVistaDatabase();
     final taskService = TaskService(
       client: supabaseClient,
       companyId: config.companyId,
@@ -49,7 +50,7 @@ class AppBootstrap {
 
   static AppBootstrap test({
     required AppConfig config,
-    required OrderVistaDatabase database,
+    required OrderVistaDatabase? database,
     required TaskRepository taskRepository,
     required SupabaseClient supabaseClient,
   }) {

@@ -25,7 +25,34 @@ class MapboxService {
     if (query.trim().isEmpty || accessToken.isEmpty) {
       return null;
     }
+    for (final candidate in _candidateQueries(query)) {
+      final uri = _buildGeocodeUri(candidate);
+      final response = await _client.get(uri);
+      if (response.statusCode != 200) {
+        continue;
+      }
 
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final features = body['features'] as List<dynamic>?;
+      if (features == null || features.isEmpty) {
+        continue;
+      }
+
+      final first = features.first as Map<String, dynamic>;
+      final center = first['center'] as List<dynamic>?;
+      if (center == null || center.length < 2) {
+        continue;
+      }
+
+      final lng = (center[0] as num).toDouble();
+      final lat = (center[1] as num).toDouble();
+      return GeoPoint(lat: lat, lng: lng);
+    }
+
+    return null;
+  }
+
+  Uri _buildGeocodeUri(String query) {
     final encoded = Uri.encodeComponent(query);
     final buffer = StringBuffer(
       'https://api.mapbox.com/geocoding/v5/mapbox.places/$encoded.json?limit=1',
@@ -40,29 +67,32 @@ class MapboxService {
     }
 
     buffer.write('&access_token=$accessToken');
+    return Uri.parse(buffer.toString());
+  }
 
-    final uri = Uri.parse(buffer.toString());
+  List<String> _candidateQueries(String query) {
+    final trimmed = query.trim();
+    final normalized = _stripExtraDetails(trimmed);
+    final candidates = <String>{
+      trimmed,
+      normalized,
+      '$normalized, Hong Kong',
+      '$trimmed, Hong Kong',
+    };
+    return candidates.where((value) => value.trim().isNotEmpty).toList();
+  }
 
-    final response = await _client.get(uri);
-    if (response.statusCode != 200) {
-      return null;
+  String _stripExtraDetails(String input) {
+    final separators = [' — ', ' – ', ' - ', ' —', ' –', ' -'];
+    var result = input;
+    for (final sep in separators) {
+      final index = result.indexOf(sep);
+      if (index > 0) {
+        result = result.substring(0, index).trim();
+        break;
+      }
     }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final features = body['features'] as List<dynamic>?;
-    if (features == null || features.isEmpty) {
-      return null;
-    }
-
-    final first = features.first as Map<String, dynamic>;
-    final center = first['center'] as List<dynamic>?;
-    if (center == null || center.length < 2) {
-      return null;
-    }
-
-    final lng = (center[0] as num).toDouble();
-    final lat = (center[1] as num).toDouble();
-    return GeoPoint(lat: lat, lng: lng);
+    return result;
   }
 
   String staticMapUrl(GeoPoint point) {
