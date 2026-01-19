@@ -30,8 +30,10 @@ class AiService {
       headers: {
         'Authorization': 'Bearer $apiKey',
         'Content-Type': 'application/json',
-        if (kIsWeb) 'HTTP-Referer': Uri.base.origin,
-        if (kIsWeb) 'X-Title': 'OrderVista Dispatch',
+        if (kIsWeb && baseUrl.contains('openrouter.ai'))
+          'HTTP-Referer': Uri.base.origin,
+        if (kIsWeb && baseUrl.contains('openrouter.ai'))
+          'X-Title': 'OrderVista Dispatch',
       },
       body: jsonEncode({
         'model': model,

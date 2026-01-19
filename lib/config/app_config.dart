@@ -23,6 +23,42 @@ class AppConfig {
         const String.fromEnvironment('OPENROUTER_API_KEY', defaultValue: '');
     final openAiKey =
         const String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
+    final deepSeekKey =
+        const String.fromEnvironment('DEEPSEEK_API_KEY', defaultValue: '');
+
+    final resolvedKey = openRouterKey.isNotEmpty
+        ? openRouterKey
+        : deepSeekKey.isNotEmpty
+            ? deepSeekKey
+            : openAiKey;
+    final resolvedBaseUrl = openRouterKey.isNotEmpty
+        ? const String.fromEnvironment(
+            'OPENROUTER_BASE_URL',
+            defaultValue: 'https://openrouter.ai/api/v1',
+          )
+        : deepSeekKey.isNotEmpty
+            ? const String.fromEnvironment(
+                'DEEPSEEK_BASE_URL',
+                defaultValue: 'https://api.deepseek.com/v1',
+              )
+            : const String.fromEnvironment(
+                'OPENROUTER_BASE_URL',
+                defaultValue: 'https://openrouter.ai/api/v1',
+              );
+    final resolvedModel = openRouterKey.isNotEmpty
+        ? const String.fromEnvironment(
+            'OPENROUTER_MODEL',
+            defaultValue: 'openai/gpt-4o-mini',
+          )
+        : deepSeekKey.isNotEmpty
+            ? const String.fromEnvironment(
+                'DEEPSEEK_MODEL',
+                defaultValue: 'deepseek-chat',
+              )
+            : const String.fromEnvironment(
+                'OPENROUTER_MODEL',
+                defaultValue: 'openai/gpt-4o-mini',
+              );
 
     return AppConfig(
       supabaseUrl: const String.fromEnvironment('SUPABASE_URL'),
@@ -50,15 +86,9 @@ class AppConfig {
             defaultValue: '114.1750'),
         fallback: 114.1750,
       ),
-      openRouterApiKey: openRouterKey.isNotEmpty ? openRouterKey : openAiKey,
-      openRouterBaseUrl: const String.fromEnvironment(
-        'OPENROUTER_BASE_URL',
-        defaultValue: 'https://openrouter.ai/api/v1',
-      ),
-      openRouterModel: const String.fromEnvironment(
-        'OPENROUTER_MODEL',
-        defaultValue: 'openai/gpt-4o-mini',
-      ),
+      openRouterApiKey: resolvedKey,
+      openRouterBaseUrl: resolvedBaseUrl,
+      openRouterModel: resolvedModel,
       telemetryEndpoint: const String.fromEnvironment(
         'ORDERVISTA_TELEMETRY_ENDPOINT',
         defaultValue: '',
