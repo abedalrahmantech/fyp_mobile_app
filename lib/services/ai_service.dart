@@ -64,6 +64,49 @@ class AiService {
     return message?['content'] as String? ?? 'No AI content.';
   }
 
+  Future<String?> chat(
+    List<Map<String, String>> messages, {
+    String? systemPrompt,
+  }) async {
+    if (apiKey.isEmpty) return 'Missing AI API key.';
+
+    final uri = Uri.parse('$baseUrl/chat/completions');
+    final payloadMessages = <Map<String, String>>[];
+    if (systemPrompt != null && systemPrompt.trim().isNotEmpty) {
+      payloadMessages.add({'role': 'system', 'content': systemPrompt.trim()});
+    }
+    payloadMessages.addAll(messages);
+
+    final response = await _client.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $apiKey',
+        'Content-Type': 'application/json',
+        if (kIsWeb && baseUrl.contains('openrouter.ai'))
+          'HTTP-Referer': Uri.base.origin,
+        if (kIsWeb && baseUrl.contains('openrouter.ai'))
+          'X-Title': 'OrderVista Dispatch',
+      },
+      body: jsonEncode({
+        'model': model,
+        'messages': payloadMessages,
+        'temperature': 0.4,
+        'max_tokens': 200,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      return 'AI request failed (${response.statusCode}).';
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final choices = body['choices'] as List<dynamic>?;
+    if (choices == null || choices.isEmpty) return 'No AI response.';
+    final message = (choices.first as Map<String, dynamic>)['message']
+        as Map<String, dynamic>?;
+    return message?['content'] as String? ?? 'No AI content.';
+  }
+
   String _buildPrompt(List<DeliveryTask> tasks) {
     if (tasks.isEmpty) {
       return 'There are no delivery tasks.';

@@ -20,6 +20,9 @@ class TaskListScreen extends StatefulWidget {
 
 class _TaskListScreenState extends State<TaskListScreen> {
   bool _aiLoading = false;
+  bool _chatLoading = false;
+  final List<_ChatMessage> _chatMessages = [];
+  final TextEditingController _chatController = TextEditingController();
 
   @override
   void initState() {
@@ -27,6 +30,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskViewModel>().loadTasks();
     });
+  }
+
+  @override
+  void dispose() {
+    _chatController.dispose();
+    super.dispose();
   }
 
   @override
@@ -39,6 +48,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
             tooltip: 'Admin portal',
             onPressed: () => context.push('/admin'),
             icon: const Icon(Icons.admin_panel_settings_outlined),
+          ),
+          IconButton(
+            tooltip: 'AI chat',
+            onPressed: _chatLoading ? null : _openAiChat,
+            icon: const Icon(Icons.chat_bubble_outline),
           ),
           IconButton(
             tooltip: 'AI summary',
@@ -109,6 +123,200 @@ class _TaskListScreenState extends State<TaskListScreen> {
       }
     }
   }
+
+  Future<void> _openAiChat() async {
+    if (_chatMessages.isEmpty) {
+      _chatMessages.add(const _ChatMessage(
+        role: 'assistant',
+        content: 'Hi! Ask me about your pending deliveries or next steps.',
+      ));
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'AI Chat',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 320,
+                    child: ListView.builder(
+                      itemCount: _chatMessages.length,
+                      itemBuilder: (context, index) {
+                        final message = _chatMessages[index];
+                        final isUser = message.role == 'user';
+                        return Align(
+                          alignment: isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isUser
+                                  ? Colors.blue.shade50
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(message.content),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _chatController,
+                          decoration: const InputDecoration(
+                            hintText: 'Ask about tasks, timing, or priorities…',
+                            border: OutlineInputBorder(),
+                          ),
+                          minLines: 1,
+                          maxLines: 3,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _chatLoading
+                            ? null
+                            : () => _sendChat(setModalState),
+                        icon: _chatLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _sendChat(StateSetter setModalState) async {
+    final text = _chatController.text.trim();
+    if (text.isEmpty) return;
+
+    final viewModel = context.read<TaskViewModel>();
+    final config = context.read<AppConfig>();
+
+    if (config.openRouterApiKey.isEmpty) {
+      setModalState(() {
+        _chatMessages.add(const _ChatMessage(
+          role: 'assistant',
+          content: 'AI key missing. Set DEEPSEEK_API_KEY in .env.',
+        ));
+      });
+      return;
+    }
+
+    setState(() => _chatLoading = true);
+    setModalState(() {});
+
+    try {
+      _chatMessages.add(_ChatMessage(role: 'user', content: text));
+      _chatController.clear();
+      setModalState(() {});
+
+      final service = AiService(
+        apiKey: config.openRouterApiKey,
+        baseUrl: config.openRouterBaseUrl,
+        model: config.openRouterModel,
+      );
+
+      final systemPrompt = _buildChatSystemPrompt(viewModel.tasks);
+      final response = await service.chat(
+        _chatMessages
+            .map((m) => {'role': m.role, 'content': m.content})
+            .toList(),
+        systemPrompt: systemPrompt,
+      );
+      service.dispose();
+
+      _chatMessages.add(_ChatMessage(
+        role: 'assistant',
+        content: response ?? 'No response.',
+      ));
+      setModalState(() {});
+    } catch (e) {
+      _chatMessages.add(_ChatMessage(
+        role: 'assistant',
+        content: 'AI error: $e',
+      ));
+      setModalState(() {});
+    } finally {
+      if (mounted) {
+        setState(() => _chatLoading = false);
+        setModalState(() {});
+      }
+    }
+  }
+
+  String _buildChatSystemPrompt(List<DeliveryTask> tasks) {
+    final buffer = StringBuffer(
+      'You are a dispatch assistant helping a delivery worker. '
+      'Provide concise, actionable guidance. Current tasks:\n',
+    );
+    if (tasks.isEmpty) {
+      buffer.write('No tasks assigned.');
+      return buffer.toString();
+    }
+
+    for (final task in tasks.take(10)) {
+      buffer.writeln(
+        '- ${task.id}: ${task.address} (status=${task.status})',
+      );
+    }
+    return buffer.toString();
+  }
+}
+
+class _ChatMessage {
+  const _ChatMessage({required this.role, required this.content});
+
+  final String role;
+  final String content;
 }
 
 class _TaskListBody extends StatelessWidget {
