@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'app/app_theme.dart';
 import 'bootstrap/app_bootstrap.dart';
 import 'config/app_config.dart';
+import 'screens/admin/admin_portal_screen.dart';
 import 'screens/task_list/task_list_screen.dart';
 import 'viewmodels/task_view_model.dart';
 
@@ -27,10 +28,18 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.system;
-
-  String getRoute([RouteMatch? routeMatch]) => '/';
-
-  List<String> getRouteStack() => const ['/'];
+  late final GoRouter _router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const TaskListScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminPortalScreen(),
+      ),
+    ],
+  );
 
   void setThemeMode(ThemeMode mode) {
     setState(() {
@@ -47,13 +56,13 @@ class _MyAppState extends State<MyApp> {
           create: (_) => widget.bootstrap.createTaskViewModel(),
         ),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
         title: 'OrderVista Dispatch',
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: _themeMode,
-        home: const TaskListScreen(),
+        routerConfig: _router,
       ),
     );
   }

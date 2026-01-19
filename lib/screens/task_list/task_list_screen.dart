@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_theme.dart';
@@ -34,6 +35,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
       appBar: AppBar(
         title: const Text('OrderVista Dispatch'),
         actions: [
+          IconButton(
+            tooltip: 'Admin portal',
+            onPressed: () => context.push('/admin'),
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+          ),
           IconButton(
             tooltip: 'AI summary',
             onPressed: _aiLoading ? null : _runAiSummary,
