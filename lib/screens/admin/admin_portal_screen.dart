@@ -27,10 +27,13 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   String _status = 'pending';
   bool _loading = false;
   bool _routeLoading = false;
+  bool _routesLoading = false;
   String? _error;
   String? _routeMessage;
+  String? _routesMessage;
   String? _role;
   List<Map<String, dynamic>> _tasks = const [];
+  List<_RouteView> _routes = const [];
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -95,6 +98,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
       _tasks = (rows as List<dynamic>)
           .map((row) => row as Map<String, dynamic>)
           .toList();
+
+      _routes = await _fetchRoutes();
     } catch (e) {
       _error = 'Failed to load admin data: $e';
     } finally {
@@ -225,6 +230,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                   _buildTaskList(),
                   const SizedBox(height: 24),
                   _buildRouteSequencer(),
+                  const SizedBox(height: 24),
+                  _buildRouteOverview(),
                 ],
               ],
             ),
@@ -410,6 +417,245 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildRouteOverview() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Routes & Stop Order',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh routes',
+                  onPressed: _routesLoading ? null : _refreshRoutes,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_routesMessage != null)
+              _InlineMessage(
+                message: _routesMessage!,
+                color: Colors.blue.shade50,
+              ),
+            if (_routesLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_routes.isEmpty)
+              const Text('No routes found yet.')
+            else
+              ..._routes.map(_buildRouteCard),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRouteCard(_RouteView route) {
+    final createdLabel = route.createdAt == null
+        ? 'Unknown time'
+        : DateFormat('MMM d • HH:mm').format(route.createdAt!.toLocal());
+    final driverLabel = route.driverId ?? 'Unassigned';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Route ${_shortId(route.id)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Text(route.status.toUpperCase()),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('Driver: $driverLabel'),
+            Text('Optimizer: ${route.optimizer} • $createdLabel'),
+            const SizedBox(height: 8),
+            if (route.stops.isEmpty)
+              const Text('No stops found for this route.')
+            else
+              Column(
+                children: route.stops
+                    .map(
+                      (stop) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          '${stop.sequence}. ${stop.address}',
+                        ),
+                        subtitle: Text(
+                          'Task ${_shortId(stop.taskId)} • ${stop.status.toUpperCase()} • Driver ${stop.driverId ?? '-'}',
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _promptAssignDriver(route),
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('Assign driver'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshRoutes() async {
+    setState(() {
+      _routesLoading = true;
+      _routesMessage = null;
+    });
+
+    try {
+      final routes = await _fetchRoutes();
+      setState(() => _routes = routes);
+    } catch (e) {
+      setState(() => _routesMessage = 'Failed to load routes: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _routesLoading = false);
+      }
+    }
+  }
+
+  Future<List<_RouteView>> _fetchRoutes() async {
+    final routesRows = await _client
+        .from('routes')
+        .select('id, driver_id, status, optimizer, created_at')
+        .order('created_at', ascending: false)
+        .limit(10);
+
+    final routes = <_RouteView>[];
+    for (final row in (routesRows as List<dynamic>)) {
+      final routeId = row['id']?.toString() ?? '';
+      if (routeId.isEmpty) {
+        continue;
+      }
+
+      final stopsRows = await _client
+          .from('route_tasks')
+          .select('sequence, task_id, tasks(address, status, driver_id)')
+          .eq('route_id', routeId)
+          .order('sequence', ascending: true);
+
+      final stops = (stopsRows as List<dynamic>).map((stopRow) {
+        final stopMap = stopRow as Map<String, dynamic>;
+        final task = stopMap['tasks'] as Map<String, dynamic>? ?? {};
+        return _RouteStopView(
+          sequence: (stopMap['sequence'] as num?)?.toInt() ?? 0,
+          taskId: stopMap['task_id']?.toString() ?? '',
+          address: task['address']?.toString() ?? 'Unknown address',
+          status: task['status']?.toString() ?? 'pending',
+          driverId: task['driver_id']?.toString(),
+        );
+      }).toList();
+
+      routes.add(
+        _RouteView(
+          id: routeId,
+          driverId: row['driver_id']?.toString(),
+          status: row['status']?.toString() ?? 'draft',
+          optimizer: row['optimizer']?.toString() ?? 'manual',
+          createdAt: row['created_at'] != null
+              ? DateTime.tryParse(row['created_at'].toString())
+              : null,
+          stops: stops,
+        ),
+      );
+    }
+
+    return routes;
+  }
+
+  Future<void> _promptAssignDriver(_RouteView route) async {
+    final controller = TextEditingController(text: route.driverId ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Assign driver to route'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Driver ID (UUID)',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('Assign'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (result == null || result.isEmpty) {
+      return;
+    }
+
+    await _assignRouteDriver(route, result);
+  }
+
+  Future<void> _assignRouteDriver(_RouteView route, String driverId) async {
+    setState(() => _routesMessage = null);
+    try {
+      await _client.from('routes').update(
+          {'driver_id': driverId, 'status': 'assigned'}).eq('id', route.id);
+
+      final taskIds = route.stops
+          .map((stop) => stop.taskId)
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (taskIds.isNotEmpty) {
+        await _client
+            .from('tasks')
+            .update({'driver_id': driverId}).inFilter('id', taskIds);
+      }
+
+      await _refreshRoutes();
+      setState(() => _routesMessage = 'Route assigned to $driverId.');
+    } catch (e) {
+      setState(() => _routesMessage = 'Failed to assign route: $e');
+    }
+  }
+
+  String _shortId(String id) {
+    if (id.length <= 8) return id;
+    return id.substring(0, 8);
   }
 
   Future<void> _generateBaselineRoute() async {
@@ -649,6 +895,40 @@ class _RouteStop {
   final String? driverId;
   final DateTime? scheduledStart;
   final GeoPoint point;
+}
+
+class _RouteView {
+  const _RouteView({
+    required this.id,
+    required this.driverId,
+    required this.status,
+    required this.optimizer,
+    required this.createdAt,
+    required this.stops,
+  });
+
+  final String id;
+  final String? driverId;
+  final String status;
+  final String optimizer;
+  final DateTime? createdAt;
+  final List<_RouteStopView> stops;
+}
+
+class _RouteStopView {
+  const _RouteStopView({
+    required this.sequence,
+    required this.taskId,
+    required this.address,
+    required this.status,
+    required this.driverId,
+  });
+
+  final int sequence;
+  final String taskId;
+  final String address;
+  final String status;
+  final String? driverId;
 }
 
 class _InlineMessage extends StatelessWidget {

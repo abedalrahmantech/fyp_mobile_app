@@ -4,30 +4,6 @@
 create extension if not exists "uuid-ossp";
 create extension if not exists postgis;
 
--- Helper functions ------------------------------------------------------------
-create or replace function public.is_company_member(target_company_id uuid)
-returns boolean
-language sql
-stable
-as $$
-  select exists (
-    select 1
-    from public.company_members cm
-    where cm.company_id = target_company_id
-      and cm.user_id = auth.uid()
-  );
-$$;
-
-create or replace function public.touch_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
 -- Core tables -----------------------------------------------------------------
 create table if not exists public.companies (
   id uuid primary key default uuid_generate_v4(),
@@ -183,6 +159,30 @@ create table if not exists public.audit_log (
   metadata jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Helper functions ------------------------------------------------------------
+create or replace function public.is_company_member(target_company_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from public.company_members cm
+    where cm.company_id = target_company_id
+      and cm.user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
 
 -- Views -----------------------------------------------------------------------
 create or replace view public.route_assignments as
