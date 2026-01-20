@@ -1,9 +1,12 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/app_config.dart';
+import '../../services/mapbox_service.dart';
 
 class AdminPortalScreen extends StatefulWidget {
   const AdminPortalScreen({super.key});
@@ -17,12 +20,15 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   final _passwordController = TextEditingController();
   final _addressController = TextEditingController();
   final _driverController = TextEditingController();
+  final _routeDriverController = TextEditingController();
   final _statusOptions = const ['pending', 'in-transit', 'delivered'];
 
   DateTime? _scheduledAt;
   String _status = 'pending';
   bool _loading = false;
+  bool _routeLoading = false;
   String? _error;
+  String? _routeMessage;
   String? _role;
   List<Map<String, dynamic>> _tasks = const [];
 
@@ -40,6 +46,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     _passwordController.dispose();
     _addressController.dispose();
     _driverController.dispose();
+    _routeDriverController.dispose();
     super.dispose();
   }
 
@@ -216,6 +223,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                   _buildTaskForm(),
                   const SizedBox(height: 24),
                   _buildTaskList(),
+                  const SizedBox(height: 24),
+                  _buildRouteSequencer(),
                 ],
               ],
             ),
@@ -357,6 +366,247 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     );
   }
 
+  Widget _buildRouteSequencer() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Baseline Route Sequencer (Nearest-Next)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Generates a simple route order for pending tasks and persists it to routes + route_tasks.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _routeDriverController,
+              decoration: const InputDecoration(
+                labelText: 'Driver ID filter (optional)',
+                hintText: 'UUID to sequence only that driver’s tasks',
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_routeMessage != null)
+              _InlineMessage(
+                message: _routeMessage!,
+                color: Colors.blue.shade50,
+              ),
+            ElevatedButton.icon(
+              onPressed: _routeLoading ? null : _generateBaselineRoute,
+              icon: _routeLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.alt_route),
+              label: const Text('Generate baseline route'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateBaselineRoute() async {
+    final config = context.read<AppConfig>();
+    final driverFilter = _routeDriverController.text.trim();
+
+    if (_tasks.isEmpty) {
+      setState(() => _routeMessage = 'No tasks available to sequence.');
+      return;
+    }
+
+    if (config.mapboxAccessToken.isEmpty) {
+      setState(() =>
+          _routeMessage = 'MAPBOX_ACCESS_TOKEN is required for geocoding.');
+      return;
+    }
+
+    setState(() {
+      _routeLoading = true;
+      _routeMessage = null;
+    });
+
+    final filteredTasks = _tasks.where((task) {
+      final status = task['status']?.toString() ?? 'pending';
+      if (status == 'delivered') {
+        return false;
+      }
+      if (driverFilter.isEmpty) {
+        return true;
+      }
+      return task['driver_id']?.toString() == driverFilter;
+    }).toList();
+
+    if (filteredTasks.isEmpty) {
+      setState(() {
+        _routeLoading = false;
+        _routeMessage =
+            'No pending tasks matched the driver filter (or all are delivered).';
+      });
+      return;
+    }
+
+    final mapbox = MapboxService(
+      config.mapboxAccessToken,
+      countryCode: config.mapboxCountryCode,
+      proximity: GeoPoint(
+        lat: config.mapboxProximityLat,
+        lng: config.mapboxProximityLng,
+      ),
+    );
+
+    try {
+      final stops = <_RouteStop>[];
+      final skipped = <String>[];
+
+      for (final task in filteredTasks) {
+        final address = task['address']?.toString() ?? '';
+        if (address.isEmpty) {
+          skipped.add(task['id']?.toString() ?? 'Unknown task');
+          continue;
+        }
+        final point = await mapbox.forwardGeocode(address);
+        if (point == null) {
+          skipped.add(task['id']?.toString() ?? address);
+          continue;
+        }
+        stops.add(
+          _RouteStop(
+            taskId: task['id']?.toString() ?? '',
+            address: address,
+            driverId: task['driver_id']?.toString(),
+            scheduledStart: task['scheduled_start'] != null
+                ? DateTime.tryParse(task['scheduled_start'].toString())
+                : null,
+            point: point,
+          ),
+        );
+      }
+
+      if (stops.length < 2) {
+        setState(() {
+          _routeLoading = false;
+          _routeMessage =
+              'Need at least 2 geocoded tasks to build a route. Skipped: ${skipped.length}.';
+        });
+        return;
+      }
+
+      final ordered = _nearestNeighborOrder(stops);
+      final totalDistance = _totalDistanceMeters(ordered);
+
+      final routeInsert = await _client
+          .from('routes')
+          .insert({
+            'company_id': config.companyId,
+            'driver_id':
+                driverFilter.isNotEmpty ? driverFilter : ordered.first.driverId,
+            'status': 'optimized',
+            'optimizer': 'baseline',
+            'eta_summary': {
+              'stops': ordered.length,
+              'total_distance_m': totalDistance.round(),
+              'baseline': true,
+            },
+          })
+          .select()
+          .single();
+
+      final routeId = routeInsert['id']?.toString();
+      if (routeId == null || routeId.isEmpty) {
+        throw Exception('Route insert did not return an ID.');
+      }
+
+      final routeTasks = <Map<String, dynamic>>[];
+      for (var i = 0; i < ordered.length; i++) {
+        final distance = i == 0
+            ? 0
+            : _haversineMeters(ordered[i - 1].point, ordered[i].point).round();
+        routeTasks.add({
+          'company_id': config.companyId,
+          'route_id': routeId,
+          'task_id': ordered[i].taskId,
+          'sequence': i + 1,
+          'travel_distance_m': distance,
+        });
+      }
+
+      await _client.from('route_tasks').insert(routeTasks);
+
+      final skippedMessage =
+          skipped.isEmpty ? '' : ' Skipped ${skipped.length} task(s).';
+
+      setState(() {
+        _routeMessage =
+            'Route created: $routeId with ${ordered.length} stops.$skippedMessage';
+      });
+    } catch (e) {
+      setState(() {
+        _routeMessage = 'Route sequencing failed: $e';
+      });
+    } finally {
+      mapbox.dispose();
+      if (mounted) {
+        setState(() => _routeLoading = false);
+      }
+    }
+  }
+
+  List<_RouteStop> _nearestNeighborOrder(List<_RouteStop> stops) {
+    final remaining = List<_RouteStop>.from(stops);
+    remaining.sort(
+      (a, b) => _compareSchedule(a.scheduledStart, b.scheduledStart),
+    );
+    final start = remaining.removeAt(0);
+    final ordered = <_RouteStop>[start];
+
+    while (remaining.isNotEmpty) {
+      final current = ordered.last;
+      remaining.sort(
+        (a, b) => _haversineMeters(current.point, a.point)
+            .compareTo(_haversineMeters(current.point, b.point)),
+      );
+      ordered.add(remaining.removeAt(0));
+    }
+
+    return ordered;
+  }
+
+  int _compareSchedule(DateTime? a, DateTime? b) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    return a.compareTo(b);
+  }
+
+  double _totalDistanceMeters(List<_RouteStop> ordered) {
+    var total = 0.0;
+    for (var i = 1; i < ordered.length; i++) {
+      total += _haversineMeters(ordered[i - 1].point, ordered[i].point);
+    }
+    return total;
+  }
+
+  double _haversineMeters(GeoPoint a, GeoPoint b) {
+    const radius = 6371000.0;
+    final lat1 = _toRadians(a.lat);
+    final lat2 = _toRadians(b.lat);
+    final dLat = _toRadians(b.lat - a.lat);
+    final dLng = _toRadians(b.lng - a.lng);
+
+    final h =
+        pow(sin(dLat / 2), 2) + cos(lat1) * cos(lat2) * pow(sin(dLng / 2), 2);
+    return 2 * radius * asin(sqrt(h));
+  }
+
+  double _toRadians(double value) => value * pi / 180.0;
+
   Future<void> _pickSchedule(BuildContext context) async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -383,6 +633,22 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
       );
     });
   }
+}
+
+class _RouteStop {
+  const _RouteStop({
+    required this.taskId,
+    required this.address,
+    required this.point,
+    this.driverId,
+    this.scheduledStart,
+  });
+
+  final String taskId;
+  final String address;
+  final String? driverId;
+  final DateTime? scheduledStart;
+  final GeoPoint point;
 }
 
 class _InlineMessage extends StatelessWidget {
