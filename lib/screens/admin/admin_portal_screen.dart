@@ -39,6 +39,9 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   String? _role;
   List<Map<String, dynamic>> _tasks = const [];
   List<_RouteView> _routes = const [];
+  final Map<String, String> _routeMapUrls = {};
+  final Map<String, bool> _routeMapLoading = {};
+  final Map<String, String?> _routeMapErrors = {};
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -708,10 +711,14 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   }
 
   Widget _buildRouteCard(_RouteView route) {
+    final config = context.read<AppConfig>();
     final createdLabel = route.createdAt == null
         ? 'Unknown time'
         : DateFormat('MMM d • HH:mm').format(route.createdAt!.toLocal());
     final driverLabel = route.driverId ?? 'Unassigned';
+    final mapUrl = _routeMapUrls[route.id];
+    final mapLoading = _routeMapLoading[route.id] ?? false;
+    final mapError = _routeMapErrors[route.id];
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -756,6 +763,39 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                       ),
                     )
                     .toList(),
+              ),
+            const SizedBox(height: 8),
+            if (mapError != null)
+              _InlineMessage(
+                message: mapError,
+                color: Colors.orange.shade100,
+              ),
+            if (mapUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  mapUrl,
+                  height: 220,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              )
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: mapLoading
+                      ? null
+                      : () => _loadRouteMapPreview(route, config),
+                  icon: mapLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.map_outlined),
+                  label: const Text('Load map preview'),
+                ),
               ),
             const SizedBox(height: 8),
             Align(
@@ -897,6 +937,85 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     } catch (e) {
       setState(() => _routesMessage = 'Failed to assign route: $e');
     }
+  }
+
+  Future<void> _loadRouteMapPreview(_RouteView route, AppConfig config) async {
+    if (config.mapboxAccessToken.isEmpty) {
+      setState(() => _routeMapErrors[route.id] =
+          'MAPBOX_ACCESS_TOKEN is required for map previews.');
+      return;
+    }
+
+    setState(() {
+      _routeMapLoading[route.id] = true;
+      _routeMapErrors.remove(route.id);
+    });
+
+    final mapbox = MapboxService(
+      config.mapboxAccessToken,
+      countryCode: config.mapboxCountryCode,
+      proximity: GeoPoint(
+        lat: config.mapboxProximityLat,
+        lng: config.mapboxProximityLng,
+      ),
+    );
+
+    try {
+      final points = <GeoPoint>[];
+      for (final stop in route.stops) {
+        if (stop.address.trim().isEmpty) {
+          continue;
+        }
+        final point = await mapbox.forwardGeocode(stop.address);
+        if (point != null) {
+          points.add(point);
+        }
+      }
+
+      if (points.isEmpty) {
+        setState(() => _routeMapErrors[route.id] =
+            'No geocoded points available for this route.');
+        return;
+      }
+
+      final mapUrl = _buildRouteStaticMap(points, config.mapboxAccessToken);
+      setState(() => _routeMapUrls[route.id] = mapUrl);
+    } catch (e) {
+      setState(() => _routeMapErrors[route.id] = 'Map preview failed: $e');
+    } finally {
+      mapbox.dispose();
+      if (mounted) {
+        setState(() => _routeMapLoading[route.id] = false);
+      }
+    }
+  }
+
+  String _buildRouteStaticMap(List<GeoPoint> points, String token) {
+    final limited = points.take(10).toList();
+    const labels = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    final markers = <String>[];
+    for (var i = 0; i < limited.length; i++) {
+      final point = limited[i];
+      final label = labels[i];
+      markers.add(
+        'pin-s-$label+285A98(${point.lng},${point.lat})',
+      );
+    }
+
+    final center = _averagePoint(limited);
+    final overlay = markers.join(',');
+    final centerPart = '${center.lng},${center.lat},12';
+    return 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/$overlay/$centerPart/800x420@2x?access_token=$token';
+  }
+
+  GeoPoint _averagePoint(List<GeoPoint> points) {
+    var lat = 0.0;
+    var lng = 0.0;
+    for (final point in points) {
+      lat += point.lat;
+      lng += point.lng;
+    }
+    return GeoPoint(lat: lat / points.length, lng: lng / points.length);
   }
 
   String _shortId(String id) {
