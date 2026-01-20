@@ -13,6 +13,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../app/app_theme.dart';
 import '../../config/app_config.dart';
+import '../../models/driver_profile.dart';
 import '../../models/delivery_task.dart';
 import '../../services/ai_service.dart';
 import '../../services/mapbox_service.dart';
@@ -56,6 +57,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
             tooltip: 'Admin portal',
             onPressed: () => context.push('/admin'),
             icon: const Icon(Icons.admin_panel_settings_outlined),
+          ),
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (mounted) {
+                setState(() {});
+              }
+            },
+            icon: const Icon(Icons.logout),
           ),
           IconButton(
             tooltip: 'AI chat',
@@ -862,9 +873,11 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
       return;
     }
 
-    if (config.companyId.isEmpty || config.driverId.isEmpty) {
-      setState(
-          () => _message = 'ORDERVISTA_COMPANY_ID and DRIVER_ID required.');
+    final driverProfile = context.read<DriverProfile?>();
+    final companyId = driverProfile?.companyId ?? config.companyId;
+    final driverId = driverProfile?.driverId ?? config.driverId;
+    if (companyId.isEmpty || driverId.isEmpty) {
+      setState(() => _message = 'Driver profile missing (company/driver id).');
       return;
     }
 
@@ -963,9 +976,11 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
     GeoPoint location, {
     required String source,
   }) async {
-    if (config.companyId.isEmpty || config.driverId.isEmpty) {
-      setState(
-          () => _message = 'ORDERVISTA_COMPANY_ID and DRIVER_ID required.');
+    final driverProfile = context.read<DriverProfile?>();
+    final companyId = driverProfile?.companyId ?? config.companyId;
+    final driverId = driverProfile?.driverId ?? config.driverId;
+    if (companyId.isEmpty || driverId.isEmpty) {
+      setState(() => _message = 'Driver profile missing (company/driver id).');
       return;
     }
 
@@ -976,8 +991,8 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
 
     try {
       final payload = {
-        'company_id': config.companyId,
-        'driver_id': config.driverId,
+        'company_id': companyId,
+        'driver_id': driverId,
         'location': 'SRID=4326;POINT(${location.lng} ${location.lat})',
         'source': source,
         'payload': {

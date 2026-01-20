@@ -155,10 +155,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   Future<void> _createTask() async {
     final config = context.read<AppConfig>();
     final address = _addressController.text.trim();
-    final driverId = _driverController.text.trim();
+    final driverInput = _driverController.text.trim();
 
-    if (address.isEmpty || driverId.isEmpty) {
-      setState(() => _error = 'Address and driver ID are required.');
+    if (address.isEmpty || driverInput.isEmpty) {
+      setState(() => _error = 'Address and driver ID/email are required.');
       return;
     }
 
@@ -168,6 +168,12 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     });
 
     try {
+      final driverId = await _resolveDriverId(driverInput, config.companyId);
+      if (driverId == null || driverId.isEmpty) {
+        setState(() => _error =
+            'Driver not found. Use the driver UUID or a registered email.');
+        return;
+      }
       await _client.from('tasks').insert({
         'company_id': config.companyId,
         'driver_id': driverId,
@@ -189,6 +195,25 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<String?> _resolveDriverId(String input, String companyId) async {
+    if (!input.contains('@')) {
+      return input;
+    }
+
+    final result = await _client.rpc(
+      'resolve_company_member_by_email',
+      params: {
+        'email': input,
+        'company_id': companyId,
+      },
+    );
+
+    if (result == null) {
+      return null;
+    }
+    return result.toString();
   }
 
   @override
@@ -312,7 +337,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
             TextField(
               controller: _driverController,
               decoration: const InputDecoration(
-                labelText: 'Driver ID (UUID)',
+                labelText: 'Driver ID (UUID) or email',
               ),
             ),
             const SizedBox(height: 12),
@@ -1028,7 +1053,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
           content: TextField(
             controller: controller,
             decoration: const InputDecoration(
-              labelText: 'Driver ID (UUID)',
+              labelText: 'Driver ID (UUID) or email',
             ),
           ),
           actions: [

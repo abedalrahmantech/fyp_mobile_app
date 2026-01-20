@@ -12,13 +12,11 @@ class AppBootstrap {
   AppBootstrap._(
     this.config,
     this.database,
-    this.taskRepository,
     this.supabaseClient,
   );
 
   final AppConfig config;
   final OrderVistaDatabase? database;
-  final TaskRepository taskRepository;
   final SupabaseClient supabaseClient;
 
   static bool _supabaseReady = false;
@@ -29,21 +27,9 @@ class AppBootstrap {
     await _ensureSupabase(config);
     final supabaseClient = Supabase.instance.client;
     final database = kIsWeb ? null : OrderVistaDatabase();
-    final taskService = TaskService(
-      client: supabaseClient,
-      companyId: config.companyId,
-      driverId: config.driverId,
-    );
-    final taskRepository = TaskRepository(
-      database: database,
-      taskService: taskService,
-      companyId: config.companyId,
-      driverId: config.driverId,
-    );
     return AppBootstrap._(
       config,
       database,
-      taskRepository,
       supabaseClient,
     );
   }
@@ -51,18 +37,30 @@ class AppBootstrap {
   static AppBootstrap test({
     required AppConfig config,
     required OrderVistaDatabase? database,
-    required TaskRepository taskRepository,
     required SupabaseClient supabaseClient,
   }) {
     return AppBootstrap._(
       config,
       database,
-      taskRepository,
       supabaseClient,
     );
   }
 
-  TaskViewModel createTaskViewModel() {
+  TaskViewModel createTaskViewModelForDriver({
+    required String companyId,
+    required String driverId,
+  }) {
+    final taskService = TaskService(
+      client: supabaseClient,
+      companyId: companyId,
+      driverId: driverId,
+    );
+    final taskRepository = TaskRepository(
+      database: database,
+      taskService: taskService,
+      companyId: companyId,
+      driverId: driverId,
+    );
     return TaskViewModel(taskRepository: taskRepository);
   }
 

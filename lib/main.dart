@@ -1,15 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app/app_theme.dart';
 import 'bootstrap/app_bootstrap.dart';
 import 'config/app_config.dart';
 import 'screens/admin/admin_portal_screen.dart';
-import 'screens/task_list/task_list_screen.dart';
-import 'viewmodels/task_view_model.dart';
+import 'screens/auth/driver_auth_gate.dart';
 
 Future<void> main() async {
+  if (kIsWeb) {
+    usePathUrlStrategy();
+  }
   final bootstrap = await AppBootstrap.initialize();
   runApp(MyApp(bootstrap: bootstrap));
 }
@@ -32,7 +36,9 @@ class _MyAppState extends State<MyApp> {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const TaskListScreen(),
+        builder: (context, state) => DriverAuthGate(
+          bootstrap: widget.bootstrap,
+        ),
       ),
       GoRoute(
         path: '/admin',
@@ -52,9 +58,6 @@ class _MyAppState extends State<MyApp> {
     return MultiProvider(
       providers: [
         Provider<AppConfig>.value(value: widget.bootstrap.config),
-        ChangeNotifierProvider<TaskViewModel>(
-          create: (_) => widget.bootstrap.createTaskViewModel(),
-        ),
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
