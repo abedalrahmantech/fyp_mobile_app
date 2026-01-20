@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/app_theme.dart';
@@ -350,6 +353,7 @@ class _TaskListBody extends StatelessWidget {
                   lastCacheUpdate: viewModel.lastCacheUpdate,
                 ),
               const _EngineerCredit(),
+              _TelemetryPanel(tasks: tasks),
               if (tasks.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 120),
@@ -537,6 +541,262 @@ class _TaskCard extends StatelessWidget {
       }
     }
   }
+}
+
+class _TelemetryPanel extends StatefulWidget {
+  const _TelemetryPanel({required this.tasks});
+
+  final List<DeliveryTask> tasks;
+
+  @override
+  State<_TelemetryPanel> createState() => _TelemetryPanelState();
+}
+
+class _TelemetryPanelState extends State<_TelemetryPanel> {
+  final _latController = TextEditingController();
+  final _lngController = TextEditingController();
+  String? _selectedTaskId;
+  String? _message;
+  bool _working = false;
+
+  @override
+  void dispose() {
+    _latController.dispose();
+    _lngController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = context.read<AppConfig>();
+    final tasks = widget.tasks;
+
+    if (tasks.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    _selectedTaskId ??= tasks.first.id;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Telemetry & Geofence (Manual Stub)',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Enter a location to simulate a device update and check proximity to a task.',
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _latController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Latitude',
+                      hintText: '22.3027',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _lngController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Longitude',
+                      hintText: '114.1772',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedTaskId,
+              items: tasks
+                  .map(
+                    (task) => DropdownMenuItem(
+                      value: task.id,
+                      child: Text('${task.id} • ${task.address}'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => _selectedTaskId = value),
+              decoration: const InputDecoration(labelText: 'Target task'),
+            ),
+            const SizedBox(height: 12),
+            if (_message != null)
+              _InlineNotice(
+                message: _message!,
+                usingDemoData: false,
+                isOffline: false,
+                lastCacheUpdate: null,
+              ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _working ? null : () => _checkProximity(config),
+                    icon: _working
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.place_outlined),
+                    label: const Text('Check proximity'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _working ? null : () => _sendTelemetry(config),
+                  icon: const Icon(Icons.near_me_outlined),
+                  label: const Text('Send telemetry'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkProximity(AppConfig config) async {
+    final task = _selectedTask();
+    if (task == null) {
+      setState(() => _message = 'Select a task first.');
+      return;
+    }
+
+    final location = _parseLocation();
+    if (location == null) {
+      setState(() => _message = 'Enter valid latitude and longitude.');
+      return;
+    }
+
+    if (config.mapboxAccessToken.isEmpty) {
+      setState(() => _message = 'MAPBOX_ACCESS_TOKEN is required.');
+      return;
+    }
+
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+
+    final mapbox = MapboxService(
+      config.mapboxAccessToken,
+      countryCode: config.mapboxCountryCode,
+      proximity: GeoPoint(
+        lat: config.mapboxProximityLat,
+        lng: config.mapboxProximityLng,
+      ),
+    );
+
+    try {
+      final taskPoint = await mapbox.forwardGeocode(task.address);
+      if (taskPoint == null) {
+        setState(() => _message = 'No location found for ${task.address}.');
+        return;
+      }
+      final distance = _haversineMeters(location, taskPoint);
+      if (distance <= 200) {
+        setState(() => _message =
+            'Within ${distance.toStringAsFixed(0)}m of ${task.id}. Suggest arrival.');
+      } else {
+        setState(() =>
+            _message = '${distance.toStringAsFixed(0)}m away from ${task.id}.');
+      }
+    } catch (e) {
+      setState(() => _message = 'Proximity check failed: $e');
+    } finally {
+      mapbox.dispose();
+      if (mounted) {
+        setState(() => _working = false);
+      }
+    }
+  }
+
+  Future<void> _sendTelemetry(AppConfig config) async {
+    final location = _parseLocation();
+    if (location == null) {
+      setState(() => _message = 'Enter valid latitude and longitude.');
+      return;
+    }
+
+    if (config.companyId.isEmpty || config.driverId.isEmpty) {
+      setState(
+          () => _message = 'ORDERVISTA_COMPANY_ID and DRIVER_ID required.');
+      return;
+    }
+
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+
+    try {
+      final payload = {
+        'company_id': config.companyId,
+        'driver_id': config.driverId,
+        'location': 'SRID=4326;POINT(${location.lng} ${location.lat})',
+        'source': 'manual',
+        'payload': {
+          'task_id': _selectedTaskId,
+          'note': 'manual telemetry stub',
+        },
+      };
+      await Supabase.instance.client.from('telemetry_events').insert(payload);
+      setState(
+          () => _message = 'Telemetry sent for ${_selectedTaskId ?? 'task'}');
+    } catch (e) {
+      setState(() => _message = 'Telemetry send failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _working = false);
+      }
+    }
+  }
+
+  DeliveryTask? _selectedTask() {
+    final id = _selectedTaskId;
+    if (id == null) return null;
+    return widget.tasks
+        .firstWhere((task) => task.id == id, orElse: () => widget.tasks.first);
+  }
+
+  GeoPoint? _parseLocation() {
+    final lat = double.tryParse(_latController.text.trim());
+    final lng = double.tryParse(_lngController.text.trim());
+    if (lat == null || lng == null) return null;
+    return GeoPoint(lat: lat, lng: lng);
+  }
+
+  double _haversineMeters(GeoPoint a, GeoPoint b) {
+    const radius = 6371000.0;
+    final lat1 = _toRadians(a.lat);
+    final lat2 = _toRadians(b.lat);
+    final dLat = _toRadians(b.lat - a.lat);
+    final dLng = _toRadians(b.lng - a.lng);
+
+    final h =
+        pow(sin(dLat / 2), 2) + cos(lat1) * cos(lat2) * pow(sin(dLng / 2), 2);
+    return 2 * radius * asin(sqrt(h));
+  }
+
+  double _toRadians(double value) => value * pi / 180.0;
 }
 
 String _formatDate(DateTime value) {
