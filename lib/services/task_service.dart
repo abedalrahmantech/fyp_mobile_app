@@ -82,6 +82,56 @@ class TaskService {
     }
   }
 
+  Future<void> saveProofOfDelivery(
+    String taskId, {
+    String? proofCode,
+    String? photoUrl,
+  }) async {
+    _assertConfiguration();
+    final payload = <String, dynamic>{
+      if (proofCode != null && proofCode.isNotEmpty) 'proof_code': proofCode,
+      if (photoUrl != null && photoUrl.isNotEmpty) 'proof_photo_url': photoUrl,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    if (payload.length == 1) {
+      throw TaskApiException('Proof code or photo URL is required.');
+    }
+
+    try {
+      final response = await _client
+          .from('tasks')
+          .update(payload)
+          .eq('company_id', _companyId)
+          .eq('driver_id', _driverId)
+          .eq('id', taskId)
+          .select('id')
+          .maybeSingle();
+
+      if (response == null) {
+        throw TaskApiException('Task $taskId was not found for this driver.');
+      }
+
+      if (photoUrl != null && photoUrl.isNotEmpty) {
+        await _client.from('media_artifacts').insert({
+          'company_id': _companyId,
+          'task_id': taskId,
+          'driver_id': _driverId,
+          'type': 'photo',
+          'storage_path': photoUrl,
+        });
+      }
+    } on PostgrestException catch (error) {
+      throw TaskApiException(
+        error.message.isNotEmpty
+            ? error.message
+            : 'Supabase error (${error.code}).',
+      );
+    } catch (error) {
+      throw TaskApiException('Unexpected Supabase error: $error');
+    }
+  }
+
   List<DeliveryTask> demoTasks() => DeliveryTask.sampleTasks();
 
   void _assertConfiguration() {
@@ -99,6 +149,7 @@ class TaskService {
       status: row['status']?.toString() ?? 'pending',
       scheduledAt: _parseDate(row['scheduled_start']),
       proofCode: row['proof_code']?.toString(),
+      proofPhotoUrl: row['proof_photo_url']?.toString(),
     );
   }
 

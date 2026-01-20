@@ -5,6 +5,7 @@ class DeliveryTask {
     required this.status,
     this.scheduledAt,
     this.proofCode,
+    this.proofPhotoUrl,
   });
 
   final String id;
@@ -12,6 +13,7 @@ class DeliveryTask {
   final String status;
   final DateTime? scheduledAt;
   final String? proofCode;
+  final String? proofPhotoUrl;
 
   DeliveryTask copyWith({
     String? id,
@@ -19,6 +21,7 @@ class DeliveryTask {
     String? status,
     DateTime? scheduledAt,
     String? proofCode,
+    String? proofPhotoUrl,
   }) {
     return DeliveryTask(
       id: id ?? this.id,
@@ -26,6 +29,7 @@ class DeliveryTask {
       status: status ?? this.status,
       scheduledAt: scheduledAt ?? this.scheduledAt,
       proofCode: proofCode ?? this.proofCode,
+      proofPhotoUrl: proofPhotoUrl ?? this.proofPhotoUrl,
     );
   }
 
@@ -38,6 +42,7 @@ class DeliveryTask {
           ? DateTime.tryParse(json['scheduledAt'].toString())
           : null,
       proofCode: json['proofCode']?.toString(),
+      proofPhotoUrl: json['proofPhotoUrl']?.toString(),
     );
   }
 
@@ -48,6 +53,8 @@ class DeliveryTask {
       'status': status,
       if (scheduledAt != null) 'scheduledAt': scheduledAt!.toIso8601String(),
       if (proofCode != null && proofCode!.isNotEmpty) 'proofCode': proofCode,
+      if (proofPhotoUrl != null && proofPhotoUrl!.isNotEmpty)
+        'proofPhotoUrl': proofPhotoUrl,
     };
   }
 

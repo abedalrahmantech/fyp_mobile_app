@@ -451,7 +451,7 @@ class _TaskCard extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: () => _promptProofCode(context, task),
                   icon: const Icon(Icons.qr_code_scanner_outlined),
-                  label: const Text('Scan / Code'),
+                  label: const Text('Proof of Delivery'),
                 ),
               ],
             ),
@@ -483,10 +483,12 @@ class _TaskCard extends StatelessWidget {
   }
 
   Future<void> _promptProofCode(BuildContext context, DeliveryTask task) async {
-    final controller = TextEditingController(text: task.proofCode);
+    final codeController = TextEditingController(text: task.proofCode);
+    final photoController =
+        TextEditingController(text: task.proofPhotoUrl ?? '');
     final viewModel = context.read<TaskViewModel>();
 
-    final code = await showDialog<String>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -494,12 +496,20 @@ class _TaskCard extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Enter or scan the delivery code to confirm handoff.'),
+              const Text('Save proof code and photo metadata for this task.'),
               const SizedBox(height: 12),
               TextField(
-                controller: controller,
+                controller: codeController,
                 decoration: const InputDecoration(
                   labelText: 'Proof of delivery code',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: photoController,
+                decoration: const InputDecoration(
+                  labelText: 'Photo URL (or storage path)',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -511,32 +521,52 @@ class _TaskCard extends StatelessWidget {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(controller.text.trim()),
-              child: const Text('Confirm'),
+              onPressed: () => Navigator.of(dialogContext).pop({
+                'code': codeController.text.trim(),
+                'photo': photoController.text.trim(),
+              }),
+              child: const Text('Save PoD'),
             ),
           ],
         );
       },
     );
 
-    if (code == null) {
+    if (result == null) {
+      codeController.dispose();
+      photoController.dispose();
+      return;
+    }
+
+    final code = result['code'];
+    final photoUrl = result['photo'];
+    if ((code == null || code.isEmpty) &&
+        (photoUrl == null || photoUrl.isEmpty)) {
+      codeController.dispose();
+      photoController.dispose();
       return;
     }
 
     try {
-      await viewModel.markAsDelivered(task, proofCode: code);
+      await viewModel.saveProofOfDelivery(
+        task,
+        proofCode: code,
+        photoUrl: photoUrl,
+      );
+      codeController.dispose();
+      photoController.dispose();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delivery code recorded for ${task.id}.')),
+          SnackBar(content: Text('Proof saved for ${task.id}.')),
         );
       }
     } catch (_) {
+      codeController.dispose();
+      photoController.dispose();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content:
-                  Text(viewModel.errorMessage ?? 'Failed to record code.')),
+              content: Text(viewModel.errorMessage ?? 'Failed to save proof.')),
         );
       }
     }

@@ -112,6 +112,57 @@ class TaskViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> saveProofOfDelivery(
+    DeliveryTask task, {
+    String? proofCode,
+    String? photoUrl,
+  }) async {
+    _errorMessage = null;
+    notifyListeners();
+
+    if (_usingDemoData) {
+      _tasks = _tasks
+          .map(
+            (item) => item.id == task.id
+                ? item.copyWith(
+                    proofCode: proofCode ?? item.proofCode,
+                    proofPhotoUrl: photoUrl ?? item.proofPhotoUrl,
+                  )
+                : item,
+          )
+          .toList();
+      notifyListeners();
+      return;
+    }
+
+    try {
+      await _taskRepository.saveProofOfDelivery(
+        task,
+        proofCode: proofCode,
+        photoUrl: photoUrl,
+      );
+      _tasks = _tasks
+          .map(
+            (item) => item.id == task.id
+                ? item.copyWith(
+                    proofCode: proofCode ?? item.proofCode,
+                    proofPhotoUrl: photoUrl ?? item.proofPhotoUrl,
+                  )
+                : item,
+          )
+          .toList();
+      notifyListeners();
+    } on TaskApiException catch (error) {
+      _errorMessage = error.message;
+      notifyListeners();
+      rethrow;
+    } catch (error) {
+      _errorMessage = 'Unexpected error: $error';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   void _loadDemoData(String? message) {
     final demoTasks = _taskRepository.demoTasks();
     _tasks = demoTasks;

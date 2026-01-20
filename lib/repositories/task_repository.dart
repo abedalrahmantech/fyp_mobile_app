@@ -96,7 +96,7 @@ class TaskRepository {
       status: Value(task.status),
       notes: const Value.absent(),
       proofCode: Value(task.proofCode),
-      proofPhotoUrl: const Value.absent(),
+      proofPhotoUrl: Value(task.proofPhotoUrl),
       scheduledStart: Value(task.scheduledAt),
       scheduledEnd: const Value.absent(),
       updatedAt: Value(task.scheduledAt ?? DateTime.now().toUtc()),
@@ -110,7 +110,21 @@ class TaskRepository {
       status: row.status,
       scheduledAt: row.scheduledStart,
       proofCode: row.proofCode,
+      proofPhotoUrl: row.proofPhotoUrl,
     );
+  }
+
+  Future<void> saveProofOfDelivery(
+    DeliveryTask task, {
+    String? proofCode,
+    String? photoUrl,
+  }) async {
+    await taskService.saveProofOfDelivery(
+      task.id,
+      proofCode: proofCode,
+      photoUrl: photoUrl,
+    );
+    await _applyLocalProof(task.id, proofCode: proofCode, photoUrl: photoUrl);
   }
 
   Future<void> _applyLocalDelivery(
@@ -136,6 +150,38 @@ class TaskRepository {
       DriftTasksCompanion(
         status: const Value('delivered'),
         proofCode: Value(proofCode),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+  }
+
+  Future<void> _applyLocalProof(
+    String taskId, {
+    String? proofCode,
+    String? photoUrl,
+  }) async {
+    final database = this.database;
+    if (database == null) {
+      _memoryTasks = _memoryTasks
+          .map(
+            (task) => task.id == taskId
+                ? task.copyWith(
+                    proofCode: proofCode ?? task.proofCode,
+                    proofPhotoUrl: photoUrl ?? task.proofPhotoUrl,
+                  )
+                : task,
+          )
+          .toList();
+      _memoryController.add(_memoryTasks);
+      return;
+    }
+
+    await (database.update(database.driftTasks)
+          ..where((row) => row.id.equals(taskId)))
+        .write(
+      DriftTasksCompanion(
+        proofCode: Value(proofCode),
+        proofPhotoUrl: Value(photoUrl),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
