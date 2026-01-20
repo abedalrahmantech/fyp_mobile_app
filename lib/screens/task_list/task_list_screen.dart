@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../app/app_theme.dart';
 import '../../config/app_config.dart';
@@ -13,6 +14,7 @@ import '../../models/delivery_task.dart';
 import '../../services/ai_service.dart';
 import '../../services/mapbox_service.dart';
 import '../../viewmodels/task_view_model.dart';
+import 'barcode_scanner_sheet.dart';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -425,6 +427,14 @@ class _TaskCard extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
             ],
+            if (task.proofPhotoUrl != null &&
+                task.proofPhotoUrl!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'PoD Photo: ${task.proofPhotoUrl}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 16),
             _TaskMapPreview(
               address: task.address,
@@ -505,12 +515,53 @@ class _TaskCard extends StatelessWidget {
                   border: OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final scanned = await showModalBottomSheet<String>(
+                      context: dialogContext,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(16)),
+                      ),
+                      builder: (_) => const BarcodeScannerSheet(),
+                    );
+                    if (scanned != null && scanned.isNotEmpty) {
+                      codeController.text = scanned;
+                    }
+                  },
+                  icon: const Icon(Icons.qr_code_scanner_outlined),
+                  label: const Text('Scan QR/Barcode'),
+                ),
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: photoController,
                 decoration: const InputDecoration(
                   labelText: 'Photo URL (or storage path)',
                   border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final picker = ImagePicker();
+                    final image = await picker.pickImage(
+                      source: ImageSource.camera,
+                      imageQuality: 80,
+                    );
+                    if (image != null) {
+                      photoController.text = image.path;
+                    }
+                  },
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Capture photo'),
                 ),
               ),
             ],

@@ -1,4 +1,4 @@
-name: meal_order_mini_app_u_i_template
+name: ordervista
 description: MVP logistics driver client for the OrderVista dispatch demo.
 
 # The following line prevents the package from being accidentally published to
@@ -43,6 +43,8 @@ dependencies:
   json_path: 0.7.2
   csv: 6.0.0
   file_picker: ^10.3.8
+  mobile_scanner: 4.0.1
+  image_picker: 1.1.2
   page_transition: 2.1.0
   path_provider: 2.1.4
   path_provider_android: 2.2.10
