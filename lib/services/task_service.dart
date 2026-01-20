@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/delivery_task.dart';
+import 'app_logger.dart';
 
 class TaskApiException implements Exception {
   TaskApiException(this.message);
@@ -26,6 +27,12 @@ class TaskService {
 
   Future<List<DeliveryTask>> fetchTasks() async {
     _assertConfiguration();
+    final correlationId = AppLogger.newCorrelationId();
+    AppLogger.event(
+      'tasks.fetch.start',
+      correlationId: correlationId,
+      data: {'companyId': _companyId, 'driverId': _driverId},
+    );
     try {
       final result = await _client
           .from('tasks')
@@ -35,14 +42,31 @@ class TaskService {
           .order('scheduled_start', ascending: true);
 
       final rows = result as List<dynamic>;
+      AppLogger.event(
+        'tasks.fetch.success',
+        correlationId: correlationId,
+        data: {'count': rows.length},
+      );
       return rows.map((row) => _mapRow(row as Map<String, dynamic>)).toList();
     } on PostgrestException catch (error) {
+      AppLogger.event(
+        'tasks.fetch.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'message': error.message, 'code': error.code},
+      );
       throw TaskApiException(
         error.message.isNotEmpty
             ? error.message
             : 'Supabase error (${error.code}).',
       );
     } catch (error) {
+      AppLogger.event(
+        'tasks.fetch.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'error': error.toString()},
+      );
       throw TaskApiException('Unexpected Supabase error: $error');
     }
   }
@@ -52,6 +76,12 @@ class TaskService {
     String? proofCode,
   }) async {
     _assertConfiguration();
+    final correlationId = AppLogger.newCorrelationId();
+    AppLogger.event(
+      'tasks.complete.start',
+      correlationId: correlationId,
+      data: {'taskId': taskId},
+    );
     final payload = <String, dynamic>{
       'status': 'delivered',
       if (proofCode != null && proofCode.isNotEmpty) 'proof_code': proofCode,
@@ -71,13 +101,30 @@ class TaskService {
       if (response == null) {
         throw TaskApiException('Task $taskId was not found for this driver.');
       }
+      AppLogger.event(
+        'tasks.complete.success',
+        correlationId: correlationId,
+        data: {'taskId': taskId},
+      );
     } on PostgrestException catch (error) {
+      AppLogger.event(
+        'tasks.complete.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'message': error.message, 'code': error.code},
+      );
       throw TaskApiException(
         error.message.isNotEmpty
             ? error.message
             : 'Supabase error (${error.code}).',
       );
     } catch (error) {
+      AppLogger.event(
+        'tasks.complete.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'error': error.toString()},
+      );
       throw TaskApiException('Unexpected Supabase error: $error');
     }
   }
@@ -88,6 +135,12 @@ class TaskService {
     String? photoUrl,
   }) async {
     _assertConfiguration();
+    final correlationId = AppLogger.newCorrelationId();
+    AppLogger.event(
+      'tasks.pod.start',
+      correlationId: correlationId,
+      data: {'taskId': taskId},
+    );
     final payload = <String, dynamic>{
       if (proofCode != null && proofCode.isNotEmpty) 'proof_code': proofCode,
       if (photoUrl != null && photoUrl.isNotEmpty) 'proof_photo_url': photoUrl,
@@ -121,13 +174,30 @@ class TaskService {
           'storage_path': photoUrl,
         });
       }
+      AppLogger.event(
+        'tasks.pod.success',
+        correlationId: correlationId,
+        data: {'taskId': taskId, 'photoSaved': photoUrl?.isNotEmpty == true},
+      );
     } on PostgrestException catch (error) {
+      AppLogger.event(
+        'tasks.pod.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'message': error.message, 'code': error.code},
+      );
       throw TaskApiException(
         error.message.isNotEmpty
             ? error.message
             : 'Supabase error (${error.code}).',
       );
     } catch (error) {
+      AppLogger.event(
+        'tasks.pod.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'error': error.toString()},
+      );
       throw TaskApiException('Unexpected Supabase error: $error');
     }
   }
