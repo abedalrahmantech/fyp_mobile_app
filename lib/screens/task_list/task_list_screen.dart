@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../app/app_theme.dart';
 import '../../config/app_config.dart';
@@ -639,9 +642,13 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
   String? _selectedTaskId;
   String? _message;
   bool _working = false;
+  bool _autoEnabled = false;
+  Timer? _autoTimer;
+  GeoPoint? _autoTargetPoint;
 
   @override
   void dispose() {
+    _autoTimer?.cancel();
     _latController.dispose();
     _lngController.dispose();
     super.dispose();
@@ -748,6 +755,25 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _working ? null : () => _toggleLiveTelemetry(config),
+                    icon: Icon(
+                      _autoEnabled ? Icons.stop_circle : Icons.play_circle,
+                    ),
+                    label: Text(
+                      _autoEnabled
+                          ? 'Stop live telemetry'
+                          : 'Start live telemetry',
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -817,6 +843,126 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
       return;
     }
 
+    await _sendTelemetryForLocation(config, location, source: 'manual');
+  }
+
+  Future<void> _toggleLiveTelemetry(AppConfig config) async {
+    if (_autoEnabled) {
+      _autoTimer?.cancel();
+      setState(() {
+        _autoEnabled = false;
+        _message = 'Live telemetry stopped.';
+      });
+      return;
+    }
+
+    if (kIsWeb) {
+      setState(() =>
+          _message = 'Live telemetry requires a mobile device (not web).');
+      return;
+    }
+
+    if (config.companyId.isEmpty || config.driverId.isEmpty) {
+      setState(
+          () => _message = 'ORDERVISTA_COMPANY_ID and DRIVER_ID required.');
+      return;
+    }
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() => _message = 'Location services are disabled.');
+      return;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      setState(() => _message = 'Location permission denied.');
+      return;
+    }
+
+    final task = _selectedTask();
+    if (task == null) {
+      setState(() => _message = 'Select a task first.');
+      return;
+    }
+
+    if (config.mapboxAccessToken.isEmpty) {
+      setState(() => _message = 'MAPBOX_ACCESS_TOKEN is required.');
+      return;
+    }
+
+    setState(() {
+      _working = true;
+      _message = null;
+    });
+
+    final mapbox = MapboxService(
+      config.mapboxAccessToken,
+      countryCode: config.mapboxCountryCode,
+      proximity: GeoPoint(
+        lat: config.mapboxProximityLat,
+        lng: config.mapboxProximityLng,
+      ),
+    );
+
+    try {
+      _autoTargetPoint = await mapbox.forwardGeocode(task.address);
+      if (_autoTargetPoint == null) {
+        setState(() => _message = 'No location found for ${task.address}.');
+        return;
+      }
+
+      _autoEnabled = true;
+      _autoTimer?.cancel();
+      _autoTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _tickLiveTelemetry(config),
+      );
+      setState(() => _message = 'Live telemetry started.');
+      await _tickLiveTelemetry(config);
+    } catch (e) {
+      setState(() => _message = 'Live telemetry failed: $e');
+    } finally {
+      mapbox.dispose();
+      if (mounted) {
+        setState(() => _working = false);
+      }
+    }
+  }
+
+  Future<void> _tickLiveTelemetry(AppConfig config) async {
+    if (!_autoEnabled) return;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+      );
+      final location = GeoPoint(
+        lat: position.latitude,
+        lng: position.longitude,
+      );
+      await _sendTelemetryForLocation(config, location, source: 'auto');
+
+      if (_autoTargetPoint != null) {
+        final distance = _haversineMeters(location, _autoTargetPoint!);
+        if (distance <= 200) {
+          setState(() => _message =
+              'Auto: within ${distance.toStringAsFixed(0)}m of ${_selectedTaskId ?? ''}. Suggest arrival.');
+        }
+      }
+    } catch (e) {
+      setState(() => _message = 'Live telemetry error: $e');
+    }
+  }
+
+  Future<void> _sendTelemetryForLocation(
+    AppConfig config,
+    GeoPoint location, {
+    required String source,
+  }) async {
     if (config.companyId.isEmpty || config.driverId.isEmpty) {
       setState(
           () => _message = 'ORDERVISTA_COMPANY_ID and DRIVER_ID required.');
@@ -833,15 +979,19 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
         'company_id': config.companyId,
         'driver_id': config.driverId,
         'location': 'SRID=4326;POINT(${location.lng} ${location.lat})',
-        'source': 'manual',
+        'source': source,
         'payload': {
           'task_id': _selectedTaskId,
-          'note': 'manual telemetry stub',
+          'note': source == 'auto'
+              ? 'auto telemetry (foreground)'
+              : 'manual telemetry stub',
         },
       };
       await Supabase.instance.client.from('telemetry_events').insert(payload);
-      setState(
-          () => _message = 'Telemetry sent for ${_selectedTaskId ?? 'task'}');
+      if (source == 'manual') {
+        setState(
+            () => _message = 'Telemetry sent for ${_selectedTaskId ?? 'task'}');
+      }
     } catch (e) {
       setState(() => _message = 'Telemetry send failed: $e');
     } finally {
