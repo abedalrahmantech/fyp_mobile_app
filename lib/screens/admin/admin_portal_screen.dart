@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -28,9 +31,11 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   bool _loading = false;
   bool _routeLoading = false;
   bool _routesLoading = false;
+  bool _csvLoading = false;
   String? _error;
   String? _routeMessage;
   String? _routesMessage;
+  String? _csvMessage;
   String? _role;
   List<Map<String, dynamic>> _tasks = const [];
   List<_RouteView> _routes = const [];
@@ -229,6 +234,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                   const SizedBox(height: 24),
                   _buildTaskList(),
                   const SizedBox(height: 24),
+                  _buildCsvImport(),
+                  const SizedBox(height: 24),
                   _buildRouteSequencer(),
                   const SizedBox(height: 24),
                   _buildRouteOverview(),
@@ -371,6 +378,245 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildCsvImport() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'CSV Import (Dispatcher)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Upload a CSV with columns: address, driver_id (optional), status (optional), scheduled_start (optional), lat, lng (optional).',
+            ),
+            const SizedBox(height: 12),
+            if (_csvMessage != null)
+              _InlineMessage(
+                message: _csvMessage!,
+                color: Colors.blue.shade50,
+              ),
+            ElevatedButton.icon(
+              onPressed: _csvLoading ? null : _pickCsvAndImport,
+              icon: _csvLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.upload_file),
+              label: const Text('Upload CSV'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickCsvAndImport() async {
+    final config = context.read<AppConfig>();
+    if (config.mapboxAccessToken.isEmpty) {
+      setState(() => _csvMessage = 'MAPBOX_ACCESS_TOKEN is required.');
+      return;
+    }
+
+    setState(() {
+      _csvLoading = true;
+      _csvMessage = null;
+    });
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      setState(() => _csvLoading = false);
+      return;
+    }
+
+    final bytes = result.files.first.bytes;
+    if (bytes == null) {
+      setState(() {
+        _csvLoading = false;
+        _csvMessage = 'Failed to read CSV file bytes.';
+      });
+      return;
+    }
+
+    final content = utf8.decode(bytes, allowMalformed: true);
+    final rows = const CsvToListConverter().convert(content);
+    if (rows.isEmpty) {
+      setState(() {
+        _csvLoading = false;
+        _csvMessage = 'CSV file is empty.';
+      });
+      return;
+    }
+
+    final header = _parseHeader(rows.first);
+    final startIndex = header.isNotEmpty ? 1 : 0;
+    final mapbox = MapboxService(
+      config.mapboxAccessToken,
+      countryCode: config.mapboxCountryCode,
+      proximity: GeoPoint(
+        lat: config.mapboxProximityLat,
+        lng: config.mapboxProximityLng,
+      ),
+    );
+
+    try {
+      final inserts = <Map<String, dynamic>>[];
+      var skipped = 0;
+
+      for (var i = startIndex; i < rows.length; i++) {
+        final row = rows[i];
+        if (row.isEmpty) continue;
+        final task = await _rowToTask(
+          row,
+          header,
+          companyId: config.companyId,
+          mapbox: mapbox,
+        );
+
+        if (task == null) {
+          skipped++;
+          continue;
+        }
+        inserts.add(task);
+      }
+
+      if (inserts.isEmpty) {
+        setState(() {
+          _csvLoading = false;
+          _csvMessage = 'No valid rows to import.';
+        });
+        return;
+      }
+
+      const chunkSize = 50;
+      for (var i = 0; i < inserts.length; i += chunkSize) {
+        final chunk = inserts.sublist(
+          i,
+          (i + chunkSize).clamp(0, inserts.length),
+        );
+        await _client.from('tasks').insert(chunk);
+      }
+
+      await _loadRoleAndTasks();
+      setState(() {
+        _csvMessage =
+            'Imported ${inserts.length} task(s). Skipped $skipped row(s).';
+      });
+    } catch (e) {
+      setState(() => _csvMessage = 'CSV import failed: $e');
+    } finally {
+      mapbox.dispose();
+      if (mounted) {
+        setState(() => _csvLoading = false);
+      }
+    }
+  }
+
+  Map<String, int> _parseHeader(List<dynamic> row) {
+    final header = <String, int>{};
+    for (var i = 0; i < row.length; i++) {
+      final value = row[i].toString().trim().toLowerCase();
+      if (value.isEmpty) continue;
+      header[value] = i;
+    }
+    if (header.containsKey('address')) {
+      return header;
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>?> _rowToTask(
+    List<dynamic> row,
+    Map<String, int> header, {
+    required String companyId,
+    required MapboxService mapbox,
+  }) async {
+    String? address;
+    String? driverId;
+    String status = 'pending';
+    DateTime? scheduledStart;
+    double? lat;
+    double? lng;
+
+    if (header.isNotEmpty) {
+      address = _getCell(row, header['address']);
+      driverId = _getCell(row, header['driver_id']) ??
+          _getCell(row, header['driver']) ??
+          _getCell(row, header['driverid']);
+      status = _getCell(row, header['status']) ?? 'pending';
+      final scheduledRaw = _getCell(row, header['scheduled_start']) ??
+          _getCell(row, header['scheduled']) ??
+          _getCell(row, header['scheduled_at']);
+      scheduledStart = _tryParseDate(scheduledRaw);
+      lat = _tryParseDouble(_getCell(row, header['lat']));
+      lng = _tryParseDouble(_getCell(row, header['lng']));
+    } else {
+      address = row.isNotEmpty ? row[0].toString() : null;
+      driverId = row.length > 1 ? row[1].toString() : null;
+      status = row.length > 2 ? row[2].toString() : 'pending';
+      scheduledStart = row.length > 3 ? _tryParseDate(row[3].toString()) : null;
+      lat = row.length > 4 ? _tryParseDouble(row[4].toString()) : null;
+      lng = row.length > 5 ? _tryParseDouble(row[5].toString()) : null;
+    }
+
+    if (address == null || address.trim().isEmpty) {
+      return null;
+    }
+
+    GeoPoint? point;
+    if (lat != null && lng != null) {
+      point = GeoPoint(lat: lat, lng: lng);
+    } else {
+      point = await mapbox.forwardGeocode(address);
+    }
+
+    final payload = <String, dynamic>{
+      'company_id': companyId,
+      'address': address.trim(),
+      'status': status.trim().isEmpty ? 'pending' : status.trim(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      if (driverId != null && driverId.trim().isNotEmpty)
+        'driver_id': driverId.trim(),
+      if (scheduledStart != null)
+        'scheduled_start': scheduledStart.toUtc().toIso8601String(),
+    };
+
+    if (point != null) {
+      payload['location'] = 'SRID=4326;POINT(${point.lng} ${point.lat})';
+    }
+
+    return payload;
+  }
+
+  String? _getCell(List<dynamic> row, int? index) {
+    if (index == null || index < 0 || index >= row.length) {
+      return null;
+    }
+    final value = row[index]?.toString().trim();
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
+  DateTime? _tryParseDate(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw.trim());
+  }
+
+  double? _tryParseDouble(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    return double.tryParse(raw.trim());
   }
 
   Widget _buildRouteSequencer() {
