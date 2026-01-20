@@ -42,6 +42,9 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   final Map<String, String> _routeMapUrls = {};
   final Map<String, bool> _routeMapLoading = {};
   final Map<String, String?> _routeMapErrors = {};
+  bool _podLoading = false;
+  String? _podMessage;
+  List<_PodRecord> _podRecords = const [];
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -108,6 +111,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
           .toList();
 
       _routes = await _fetchRoutes();
+      _podRecords = await _fetchPodRecords();
     } catch (e) {
       _error = 'Failed to load admin data: $e';
     } finally {
@@ -242,6 +246,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                   _buildRouteSequencer(),
                   const SizedBox(height: 24),
                   _buildRouteOverview(),
+                  const SizedBox(height: 24),
+                  _buildProofReview(),
                 ],
               ],
             ),
@@ -708,6 +714,139 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildProofReview() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Proof of Delivery Review',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh PoD',
+                  onPressed: _podLoading ? null : _refreshPod,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_podMessage != null)
+              _InlineMessage(
+                message: _podMessage!,
+                color: Colors.blue.shade50,
+              ),
+            if (_podLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_podRecords.isEmpty)
+              const Text('No proof records found yet.')
+            else
+              ..._podRecords.map(_buildPodCard),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPodCard(_PodRecord record) {
+    final createdLabel = record.createdAt == null
+        ? 'Unknown time'
+        : DateFormat('MMM d • HH:mm').format(record.createdAt!.toLocal());
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Task ${_shortId(record.taskId)} • $createdLabel',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(record.address ?? 'Unknown address'),
+            Text('Driver: ${record.driverId ?? '-'}'),
+            if (record.proofCode != null && record.proofCode!.isNotEmpty)
+              Text('Code: ${record.proofCode}'),
+            if (record.photoUrl != null && record.photoUrl!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  record.photoUrl!,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stack) {
+                    return Container(
+                      height: 180,
+                      color: Colors.grey.shade100,
+                      alignment: Alignment.center,
+                      child: const Text('Photo preview unavailable'),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshPod() async {
+    setState(() {
+      _podLoading = true;
+      _podMessage = null;
+    });
+    try {
+      final records = await _fetchPodRecords();
+      setState(() => _podRecords = records);
+    } catch (e) {
+      setState(() => _podMessage = 'Failed to load PoD: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _podLoading = false);
+      }
+    }
+  }
+
+  Future<List<_PodRecord>> _fetchPodRecords() async {
+    final response = await _client
+        .from('tasks')
+        .select(
+            'id, address, driver_id, proof_code, proof_photo_url, updated_at')
+        .or('proof_code.not.is.null,proof_photo_url.not.is.null')
+        .order('updated_at', ascending: false)
+        .limit(20);
+
+    return (response as List<dynamic>).map((row) {
+      final map = row as Map<String, dynamic>;
+      return _PodRecord(
+        taskId: map['id']?.toString() ?? '',
+        address: map['address']?.toString(),
+        driverId: map['driver_id']?.toString(),
+        proofCode: map['proof_code']?.toString(),
+        photoUrl: map['proof_photo_url']?.toString(),
+        createdAt: map['updated_at'] != null
+            ? DateTime.tryParse(map['updated_at'].toString())
+            : null,
+      );
+    }).toList();
   }
 
   Widget _buildRouteCard(_RouteView route) {
@@ -1294,6 +1433,24 @@ class _RouteStopView {
   final String address;
   final String status;
   final String? driverId;
+}
+
+class _PodRecord {
+  const _PodRecord({
+    required this.taskId,
+    required this.address,
+    required this.driverId,
+    required this.proofCode,
+    required this.photoUrl,
+    required this.createdAt,
+  });
+
+  final String taskId;
+  final String? address;
+  final String? driverId;
+  final String? proofCode;
+  final String? photoUrl;
+  final DateTime? createdAt;
 }
 
 class _InlineMessage extends StatelessWidget {
