@@ -342,7 +342,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _status,
+              initialValue: _status,
               items: _statusOptions
                   .map((status) => DropdownMenuItem(
                         value: status,
@@ -1276,12 +1276,30 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
       final ordered = _nearestNeighborOrder(stops);
       final totalDistance = _totalDistanceMeters(ordered);
 
+      // Resolve driver_id: use filter input, or first task's driver if valid
+      String? resolvedDriverId;
+      if (driverFilter.isNotEmpty) {
+        // Check if it's an email and resolve to company_member id
+        resolvedDriverId =
+            await _resolveDriverId(driverFilter, config.companyId);
+      } else if (ordered.first.driverId != null &&
+          ordered.first.driverId!.isNotEmpty) {
+        // Verify the driver_id from task is a valid company_member
+        final memberCheck = await _client
+            .from('company_members')
+            .select('id')
+            .eq('id', ordered.first.driverId!)
+            .maybeSingle();
+        if (memberCheck != null) {
+          resolvedDriverId = ordered.first.driverId;
+        }
+      }
+
       final routeInsert = await _client
           .from('routes')
           .insert({
             'company_id': config.companyId,
-            'driver_id':
-                driverFilter.isNotEmpty ? driverFilter : ordered.first.driverId,
+            'driver_id': resolvedDriverId, // null is allowed by schema
             'status': 'optimized',
             'optimizer': 'baseline',
             'eta_summary': {
