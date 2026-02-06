@@ -97,6 +97,7 @@ class TaskRepository {
       notes: const Value.absent(),
       proofCode: Value(task.proofCode),
       proofPhotoUrl: Value(task.proofPhotoUrl),
+      priority: Value(task.priority),
       scheduledStart: Value(task.scheduledAt),
       scheduledEnd: const Value.absent(),
       updatedAt: Value(task.scheduledAt ?? DateTime.now().toUtc()),
@@ -109,6 +110,7 @@ class TaskRepository {
       address: row.address,
       status: row.status,
       scheduledAt: row.scheduledStart,
+      priority: row.priority,
       proofCode: row.proofCode,
       proofPhotoUrl: row.proofPhotoUrl,
     );

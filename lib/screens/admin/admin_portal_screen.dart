@@ -46,6 +46,24 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   String? _podMessage;
   List<_PodRecord> _podRecords = const [];
 
+  // Driver management state
+  bool _driversLoading = false;
+  String? _driversMessage;
+  List<_DriverInfo> _drivers = const [];
+
+  // Chat state
+  bool _chatLoading = false;
+  String? _chatMessage;
+  List<_ChatMessage> _chatMessages = const [];
+  final _chatInputController = TextEditingController();
+  String? _selectedChatDriver;
+
+  // Customer tracking lookup state
+  bool _trackingLoading = false;
+  String? _trackingMessage;
+  Map<String, dynamic>? _trackingResult;
+  final _trackingCodeController = TextEditingController();
+
   SupabaseClient get _client => Supabase.instance.client;
 
   @override
@@ -61,6 +79,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     _addressController.dispose();
     _driverController.dispose();
     _routeDriverController.dispose();
+    _chatInputController.dispose();
+    _trackingCodeController.dispose();
     super.dispose();
   }
 
@@ -88,14 +108,30 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         return;
       }
 
-      final profile = await _client
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
+      // Query company_members table to get user's role
+      // User may have multiple memberships, so get list and prioritize admin/dispatcher
+      final memberships = await _client
+          .from('company_members')
+          .select('role, company_id')
+          .eq('user_id', user.id);
 
-      _role = profile?['role']?.toString();
-      if (_role != 'admin') {
+      // Find first admin or dispatcher membership
+      Map<String, dynamic>? selectedMembership;
+      for (final m in (memberships as List)) {
+        final role = m['role']?.toString();
+        if (role == 'admin' || role == 'dispatcher') {
+          selectedMembership = m as Map<String, dynamic>;
+          break;
+        }
+      }
+      // Fallback to first membership if no admin/dispatcher found
+      selectedMembership ??= memberships.isNotEmpty 
+          ? memberships.first as Map<String, dynamic> 
+          : null;
+
+      _role = selectedMembership?['role']?.toString();
+      // Allow both 'admin' and 'dispatcher' roles to access admin portal
+      if (_role != 'admin' && _role != 'dispatcher') {
         _tasks = const [];
         return;
       }
@@ -150,6 +186,92 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
       _role = null;
       _tasks = const [];
     });
+  }
+
+  Future<void> _recommendDriver() async {
+    final config = context.read<AppConfig>();
+    final address = _addressController.text.trim();
+
+    if (address.isEmpty) {
+      setState(() => _error = 'Enter an address first to recommend a driver.');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // First, geocode the address to get coordinates
+      final mapboxService = MapboxService(
+        config.mapboxAccessToken,
+        countryCode: config.mapboxCountryCode,
+        proximity: GeoPoint(
+          lat: config.mapboxProximityLat,
+          lng: config.mapboxProximityLng,
+        ),
+      );
+
+      final addressCoords = await mapboxService.forwardGeocode(address);
+
+      if (addressCoords == null) {
+        setState(() {
+          _error = 'Could not geocode address. Try a more specific address.';
+          _loading = false;
+        });
+        return;
+      }
+
+      // Call the recommend_driver_for_tasks RPC
+      final response = await _client.rpc(
+        'recommend_driver_for_tasks',
+        params: {
+          'p_company_id': config.companyId,
+          'p_task_lat': addressCoords.lat,
+          'p_task_lng': addressCoords.lng,
+        },
+      );
+
+      final recommendations = response as List<dynamic>?;
+
+      if (recommendations == null || recommendations.isEmpty) {
+        setState(() {
+          _error =
+              'No available drivers found. Make sure drivers have set their availability.';
+        });
+      } else {
+        // Get the top recommended driver
+        final topDriver = recommendations.first as Map<String, dynamic>;
+        final driverId = topDriver['member_id']?.toString() ?? '';
+        final distanceKm = topDriver['distance_km']?.toString() ?? 'unknown';
+
+        _driverController.text = driverId;
+
+        // Show recommendation details
+        setState(() {
+          _error = null;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Recommended: ${topDriver['email'] ?? 'Driver'} (${distanceKm}km away, ${topDriver['task_count']} active tasks)',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Failed to recommend driver: $e';
+      });
+    } finally {
+      setState(() => _loading = false);
+    }
   }
 
   Future<void> _createTask() async {
@@ -252,16 +374,22 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                 if (session != null && _role == null)
                   _InlineMessage(
                     message:
-                        'No profile found for ${user?.email ?? 'user'}. Run the SQL setup for profiles/roles.',
+                        'No company membership found for ${user?.email ?? 'user'}. Please contact your administrator.',
                     color: Colors.orange.shade100,
                   ),
-                if (session != null && _role != null && _role != 'admin')
+                if (session != null && _role != null && _role != 'admin' && _role != 'dispatcher')
                   _InlineMessage(
                     message:
-                        'Signed in as ${user?.email}. Role=$_role. Admin access required.',
+                        'Signed in as ${user?.email}. Role=$_role. Admin or dispatcher access required.',
                     color: Colors.red.shade100,
                   ),
-                if (session != null && _role == 'admin') ...[
+                if (session != null && (_role == 'admin' || _role == 'dispatcher')) ...[
+                  _buildDriverManagement(),
+                  const SizedBox(height: 24),
+                  _buildAdminDriverChat(),
+                  const SizedBox(height: 24),
+                  _buildCustomerTracking(),
+                  const SizedBox(height: 24),
                   _buildTaskForm(),
                   const SizedBox(height: 24),
                   _buildTaskList(),
@@ -334,15 +462,31 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _driverController,
-              decoration: const InputDecoration(
-                labelText: 'Driver ID (UUID) or email',
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _driverController,
+                    decoration: const InputDecoration(
+                      labelText: 'Driver ID (UUID) or email',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _recommendDriver,
+                  icon: const Icon(Icons.recommend, size: 18),
+                  label: const Text('Recommend'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.deepPurple,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _status,
+              value: _status,
               items: _statusOptions
                   .map((status) => DropdownMenuItem(
                         value: status,
@@ -872,6 +1016,834 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
             : null,
       );
     }).toList();
+  }
+
+  // ===========================================================================
+  // Driver Management
+  // ===========================================================================
+
+  Widget _buildDriverManagement() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Driver Availability',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh drivers',
+                  onPressed: _driversLoading ? null : _refreshDrivers,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_driversMessage != null)
+              _InlineMessage(
+                message: _driversMessage!,
+                color: Colors.blue.shade50,
+              ),
+            if (_driversLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_drivers.isEmpty)
+              const Text('No drivers found. Add drivers to your company.')
+            else
+              ..._drivers.map(_buildDriverCard),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDriverCard(_DriverInfo driver) {
+    final lastSeenLabel = driver.lastLocationAt == null
+        ? 'Location unknown'
+        : 'Last seen ${DateFormat('MMM d • HH:mm').format(driver.lastLocationAt!.toLocal())}';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: driver.isAvailable
+                ? Colors.green.shade300
+                : Colors.grey.shade300,
+            width: driver.isAvailable ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: driver.isAvailable ? Colors.green : Colors.grey,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    driver.email ?? 'Driver ${_shortId(driver.memberId)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${driver.isAvailable ? 'Available' : 'Unavailable'} • ${driver.currentTaskCount} active task(s)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  Text(
+                    lastSeenLabel,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                  if (driver.lastLocationLat != null &&
+                      driver.lastLocationLng != null)
+                    Text(
+                      'Location: ${driver.lastLocationLat!.toStringAsFixed(4)}, ${driver.lastLocationLng!.toStringAsFixed(4)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Chat with driver',
+              onPressed: () {
+                setState(() {
+                  _selectedChatDriver = driver.memberId;
+                });
+                _refreshChatMessages();
+              },
+              icon: const Icon(Icons.chat_bubble_outline),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshDrivers() async {
+    final config = context.read<AppConfig>();
+    setState(() {
+      _driversLoading = true;
+      _driversMessage = null;
+    });
+    try {
+      final drivers = await _fetchDrivers(config.companyId);
+      setState(() => _drivers = drivers);
+    } catch (e) {
+      setState(() => _driversMessage = 'Failed to load drivers: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _driversLoading = false);
+      }
+    }
+  }
+
+  Future<List<_DriverInfo>> _fetchDrivers(String companyId) async {
+    // First try to use the RPC function
+    try {
+      final response = await _client.rpc(
+        'get_available_drivers',
+        params: {'p_company_id': companyId},
+      );
+
+      if (response is List) {
+        // Also fetch emails from auth.users via company_members join
+        final memberIds = response
+            .map((r) => r['member_id']?.toString())
+            .whereType<String>()
+            .toList();
+        final emailMap = await _fetchDriverEmails(memberIds);
+
+        return response.map((row) {
+          final map = row as Map<String, dynamic>;
+          final memberId = map['member_id']?.toString() ?? '';
+          return _DriverInfo(
+            memberId: memberId,
+            userId: map['user_id']?.toString(),
+            email: emailMap[memberId],
+            isAvailable: map['is_available'] == true,
+            currentTaskCount: (map['current_task_count'] as num?)?.toInt() ?? 0,
+            lastLocationLat: (map['last_location_lat'] as num?)?.toDouble(),
+            lastLocationLng: (map['last_location_lng'] as num?)?.toDouble(),
+            lastLocationAt: map['last_location_at'] != null
+                ? DateTime.tryParse(map['last_location_at'].toString())
+                : null,
+          );
+        }).toList();
+      }
+    } catch (e) {
+      // Fallback to direct query if RPC fails
+      debugPrint('RPC failed, using fallback: $e');
+    }
+
+    // Fallback: direct query
+    final response = await _client
+        .from('company_members')
+        .select(
+            'id, user_id, role, is_available, current_task_count, last_location_at')
+        .eq('company_id', companyId)
+        .eq('role', 'driver');
+
+    final memberIds = (response as List)
+        .map((r) => r['id']?.toString())
+        .whereType<String>()
+        .toList();
+    final emailMap = await _fetchDriverEmails(memberIds);
+
+    return response.map((row) {
+      final map = row;
+      final memberId = map['id']?.toString() ?? '';
+      return _DriverInfo(
+        memberId: memberId,
+        userId: map['user_id']?.toString(),
+        email: emailMap[memberId],
+        isAvailable: map['is_available'] == true,
+        currentTaskCount: (map['current_task_count'] as num?)?.toInt() ?? 0,
+        lastLocationLat: null,
+        lastLocationLng: null,
+        lastLocationAt: map['last_location_at'] != null
+            ? DateTime.tryParse(map['last_location_at'].toString())
+            : null,
+      );
+    }).toList();
+  }
+
+  Future<Map<String, String>> _fetchDriverEmails(List<String> memberIds) async {
+    if (memberIds.isEmpty) return {};
+
+    try {
+      // Query company_members with user_id, then get emails from profiles or users
+      final response = await _client
+          .from('company_members')
+          .select('id, user_id')
+          .inFilter('id', memberIds);
+
+      final userIds = (response as List)
+          .map((r) => r['user_id']?.toString())
+          .whereType<String>()
+          .toList();
+
+      if (userIds.isEmpty) return {};
+
+      // Try to get emails from profiles table
+      final profilesResponse = await _client
+          .from('profiles')
+          .select('id, email')
+          .inFilter('id', userIds);
+
+      final memberToUser = <String, String>{};
+      for (final row in response) {
+        final memberId = row['id']?.toString();
+        final userId = row['user_id']?.toString();
+        if (memberId != null && userId != null) {
+          memberToUser[memberId] = userId;
+        }
+      }
+
+      final userToEmail = <String, String>{};
+      for (final row in profilesResponse as List) {
+        final userId = row['id']?.toString();
+        final email = row['email']?.toString();
+        if (userId != null && email != null) {
+          userToEmail[userId] = email;
+        }
+      }
+
+      final result = <String, String>{};
+      for (final entry in memberToUser.entries) {
+        final email = userToEmail[entry.value];
+        if (email != null) {
+          result[entry.key] = email;
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Failed to fetch driver emails: $e');
+      return {};
+    }
+  }
+
+  // ===========================================================================
+  // Admin-Driver Chat
+  // ===========================================================================
+
+  Widget _buildAdminDriverChat() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Driver Communication',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                if (_selectedChatDriver != null)
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedChatDriver = null;
+                        _chatMessages = const [];
+                      });
+                    },
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Close'),
+                  ),
+                IconButton(
+                  tooltip: 'Refresh messages',
+                  onPressed: _chatLoading || _selectedChatDriver == null
+                      ? null
+                      : _refreshChatMessages,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_chatMessage != null)
+              _InlineMessage(
+                message: _chatMessage!,
+                color: Colors.blue.shade50,
+              ),
+            if (_selectedChatDriver == null)
+              const Text(
+                'Select a driver from the list above to start a conversation.',
+                style: TextStyle(color: Colors.grey),
+              )
+            else ...[
+              Text(
+                'Chatting with: ${_getDriverLabel(_selectedChatDriver!)}',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: _chatLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _chatMessages.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No messages yet. Start the conversation!',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            reverse: true,
+                            itemCount: _chatMessages.length,
+                            itemBuilder: (context, index) {
+                              final msg = _chatMessages[index];
+                              final isMe = msg.isFromAdmin;
+                              return Align(
+                                alignment: isMe
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Container(
+                                  margin:
+                                      const EdgeInsets.symmetric(vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isMe
+                                        ? Colors.blue.shade100
+                                        : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(msg.message),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        DateFormat('HH:mm').format(
+                                          msg.createdAt.toLocal(),
+                                        ),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _chatInputController,
+                      decoration: const InputDecoration(
+                        hintText: 'Type a message...',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      onSubmitted: (_) => _sendChatMessage(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: _sendChatMessage,
+                    icon: const Icon(Icons.send),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _sendBroadcastMessage,
+                icon: const Icon(Icons.campaign),
+                label: const Text('Broadcast to All Drivers'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getDriverLabel(String memberId) {
+    final driver = _drivers.where((d) => d.memberId == memberId).firstOrNull;
+    return driver?.email ?? 'Driver ${_shortId(memberId)}';
+  }
+
+  Future<void> _refreshChatMessages() async {
+    if (_selectedChatDriver == null) return;
+
+    setState(() {
+      _chatLoading = true;
+      _chatMessage = null;
+    });
+
+    try {
+      final config = context.read<AppConfig>();
+      final messages =
+          await _fetchChatMessages(config.companyId, _selectedChatDriver!);
+      setState(() => _chatMessages = messages);
+    } catch (e) {
+      setState(() => _chatMessage = 'Failed to load messages: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _chatLoading = false);
+      }
+    }
+  }
+
+  Future<List<_ChatMessage>> _fetchChatMessages(
+      String companyId, String driverId) async {
+    // Get current admin's member ID
+    final user = _client.auth.currentUser;
+    if (user == null) return [];
+
+    final adminMember = await _client
+        .from('company_members')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('company_id', companyId)
+        .maybeSingle();
+
+    if (adminMember == null) return [];
+    final adminMemberId = adminMember['id']?.toString();
+
+    // Fetch messages between admin and driver
+    final response = await _client
+        .from('chat_messages')
+        .select(
+            'id, sender_id, recipient_id, message, is_broadcast, created_at')
+        .eq('company_id', companyId)
+        .or('and(sender_id.eq.$adminMemberId,recipient_id.eq.$driverId),and(sender_id.eq.$driverId,recipient_id.eq.$adminMemberId),is_broadcast.eq.true')
+        .order('created_at', ascending: false)
+        .limit(50);
+
+    return (response as List).map((row) {
+      final map = row as Map<String, dynamic>;
+      return _ChatMessage(
+        id: map['id']?.toString() ?? '',
+        senderId: map['sender_id']?.toString() ?? '',
+        recipientId: map['recipient_id']?.toString(),
+        message: map['message']?.toString() ?? '',
+        isBroadcast: map['is_broadcast'] == true,
+        isFromAdmin: map['sender_id']?.toString() == adminMemberId,
+        createdAt: DateTime.tryParse(map['created_at']?.toString() ?? '') ??
+            DateTime.now(),
+      );
+    }).toList();
+  }
+
+  Future<void> _sendChatMessage() async {
+    final message = _chatInputController.text.trim();
+    if (message.isEmpty || _selectedChatDriver == null) return;
+
+    final config = context.read<AppConfig>();
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final adminMember = await _client
+          .from('company_members')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('company_id', config.companyId)
+          .maybeSingle();
+
+      if (adminMember == null) {
+        setState(() => _chatMessage = 'Admin member not found.');
+        return;
+      }
+
+      await _client.from('chat_messages').insert({
+        'company_id': config.companyId,
+        'sender_id': adminMember['id'],
+        'recipient_id': _selectedChatDriver,
+        'message': message,
+        'is_broadcast': false,
+      });
+
+      _chatInputController.clear();
+      await _refreshChatMessages();
+    } catch (e) {
+      setState(() => _chatMessage = 'Failed to send message: $e');
+    }
+  }
+
+  Future<void> _sendBroadcastMessage() async {
+    final message = _chatInputController.text.trim();
+    if (message.isEmpty) {
+      setState(() => _chatMessage = 'Please enter a message to broadcast.');
+      return;
+    }
+
+    final config = context.read<AppConfig>();
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final adminMember = await _client
+          .from('company_members')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('company_id', config.companyId)
+          .maybeSingle();
+
+      if (adminMember == null) {
+        setState(() => _chatMessage = 'Admin member not found.');
+        return;
+      }
+
+      await _client.from('chat_messages').insert({
+        'company_id': config.companyId,
+        'sender_id': adminMember['id'],
+        'recipient_id': null,
+        'message': message,
+        'is_broadcast': true,
+      });
+
+      _chatInputController.clear();
+      setState(() => _chatMessage = 'Broadcast sent to all drivers!');
+      await _refreshChatMessages();
+    } catch (e) {
+      setState(() => _chatMessage = 'Failed to broadcast: $e');
+    }
+  }
+
+  // ==========================================================================
+  // Customer Tracking Lookup
+  // ==========================================================================
+  Widget _buildCustomerTracking() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.search, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                const Text(
+                  'Customer Tracking Lookup',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (_trackingLoading)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Look up delivery status using customer tracking code',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _trackingCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tracking Code',
+                      hintText: 'e.g. OV-ABC1-XYZ2',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.qr_code),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                    onSubmitted: (_) => _lookupTracking(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _trackingLoading ? null : _lookupTracking,
+                  icon: const Icon(Icons.search),
+                  label: const Text('Lookup'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_trackingMessage != null) ...[
+              const SizedBox(height: 12),
+              _InlineMessage(
+                message: _trackingMessage!,
+                color:
+                    _trackingResult != null && _trackingResult!['found'] == true
+                        ? Colors.green.shade100
+                        : Colors.orange.shade100,
+              ),
+            ],
+            if (_trackingResult != null &&
+                _trackingResult!['found'] == true) ...[
+              const SizedBox(height: 16),
+              _buildTrackingResultCard(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrackingResultCard() {
+    final result = _trackingResult!;
+    final status = result['status']?.toString() ?? 'unknown';
+    final address = result['address']?.toString() ?? 'Unknown';
+    final driverAssigned = result['driver_assigned'] == true;
+    final proofAvailable = result['proof_available'] == true;
+    final lastUpdate = result['last_update'] != null
+        ? DateTime.tryParse(result['last_update'].toString())
+        : null;
+
+    Color statusColor;
+    IconData statusIcon;
+    switch (status.toLowerCase()) {
+      case 'delivered':
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle;
+        break;
+      case 'in-transit':
+        statusColor = Colors.blue;
+        statusIcon = Icons.local_shipping;
+        break;
+      case 'pending':
+      default:
+        statusColor = Colors.orange;
+        statusIcon = Icons.schedule;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        border: Border.all(color: statusColor.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(statusIcon, color: statusColor, size: 32),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      result['tracking_code']?.toString() ?? '',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        status.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildTrackingDetailRow(
+            Icons.location_on,
+            'Delivery Address',
+            address,
+          ),
+          const SizedBox(height: 8),
+          _buildTrackingDetailRow(
+            Icons.person,
+            'Driver',
+            driverAssigned ? 'Assigned' : 'Not yet assigned',
+          ),
+          if (lastUpdate != null) ...[
+            const SizedBox(height: 8),
+            _buildTrackingDetailRow(
+              Icons.update,
+              'Last Update',
+              DateFormat('MMM d, yyyy • HH:mm').format(lastUpdate.toLocal()),
+            ),
+          ],
+          if (proofAvailable && status.toLowerCase() == 'delivered') ...[
+            const SizedBox(height: 8),
+            _buildTrackingDetailRow(
+              Icons.verified,
+              'Proof of Delivery',
+              'Available',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrackingDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: Colors.grey.shade600),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _lookupTracking() async {
+    final code = _trackingCodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _trackingMessage = 'Please enter a tracking code.';
+        _trackingResult = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _trackingLoading = true;
+      _trackingMessage = null;
+      _trackingResult = null;
+    });
+
+    try {
+      final response = await _client.rpc(
+        'lookup_delivery_by_tracking',
+        params: {'p_tracking_code': code},
+      );
+
+      final result = response as Map<String, dynamic>?;
+
+      if (result == null || result['found'] != true) {
+        setState(() {
+          _trackingMessage = 'No delivery found with tracking code: $code';
+          _trackingResult = null;
+        });
+      } else {
+        setState(() {
+          _trackingMessage = 'Delivery found!';
+          _trackingResult = result;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _trackingMessage = 'Error looking up tracking code: $e';
+        _trackingResult = null;
+      });
+    } finally {
+      setState(() => _trackingLoading = false);
+    }
   }
 
   Widget _buildRouteCard(_RouteView route) {
@@ -1514,4 +2486,46 @@ class _InlineMessage extends StatelessWidget {
       child: Text(message),
     );
   }
+}
+
+class _DriverInfo {
+  const _DriverInfo({
+    required this.memberId,
+    required this.userId,
+    required this.email,
+    required this.isAvailable,
+    required this.currentTaskCount,
+    required this.lastLocationLat,
+    required this.lastLocationLng,
+    required this.lastLocationAt,
+  });
+
+  final String memberId;
+  final String? userId;
+  final String? email;
+  final bool isAvailable;
+  final int currentTaskCount;
+  final double? lastLocationLat;
+  final double? lastLocationLng;
+  final DateTime? lastLocationAt;
+}
+
+class _ChatMessage {
+  const _ChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.recipientId,
+    required this.message,
+    required this.isBroadcast,
+    required this.isFromAdmin,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String senderId;
+  final String? recipientId;
+  final String message;
+  final bool isBroadcast;
+  final bool isFromAdmin;
+  final DateTime createdAt;
 }

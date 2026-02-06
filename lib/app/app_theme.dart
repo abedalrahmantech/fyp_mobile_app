@@ -29,7 +29,7 @@ class AppTheme {
           style: ElevatedButton.styleFrom(
             backgroundColor: _primary,
             foregroundColor: Colors.white,
-            minimumSize: const Size.fromHeight(44),
+            minimumSize: const Size(88, 44),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -55,7 +55,7 @@ class AppTheme {
           style: ElevatedButton.styleFrom(
             backgroundColor: _accent,
             foregroundColor: Colors.black,
-            minimumSize: const Size.fromHeight(44),
+            minimumSize: const Size(88, 44),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),

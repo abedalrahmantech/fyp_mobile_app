@@ -34,12 +34,44 @@ class TaskViewModel extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  List<DeliveryTask> get tasks => _tasks;
+  List<DeliveryTask> get tasks => _sortTasks(_tasks);
   bool get usingDemoData => _usingDemoData;
   bool get isOffline => _isOffline;
   int get pendingSyncCount => _pendingSyncCount;
   DateTime? get lastSuccessfulSync => _lastSuccessfulSync;
   DateTime? get lastCacheUpdate => _lastCacheUpdate;
+
+  /// Sorts tasks with the following priority:
+  /// 1. Pending/in-transit tasks come before delivered tasks
+  /// 2. Within same status group, sort by priority (higher first)
+  /// 3. Then by scheduled time (earlier first)
+  /// 4. Finally by creation/ID for consistency
+  List<DeliveryTask> _sortTasks(List<DeliveryTask> tasks) {
+    final sorted = List<DeliveryTask>.from(tasks);
+    sorted.sort((a, b) {
+      // First: status priority (pending > in-transit > delivered)
+      final statusOrder = {'pending': 0, 'in-transit': 1, 'delivered': 2};
+      final statusA = statusOrder[a.status.toLowerCase()] ?? 1;
+      final statusB = statusOrder[b.status.toLowerCase()] ?? 1;
+      if (statusA != statusB) return statusA.compareTo(statusB);
+
+      // Second: priority (higher first, so reverse comparison)
+      if (a.priority != b.priority) {
+        return b.priority.compareTo(a.priority);
+      }
+
+      // Third: scheduled time (earlier first)
+      if (a.scheduledAt != null && b.scheduledAt != null) {
+        return a.scheduledAt!.compareTo(b.scheduledAt!);
+      }
+      if (a.scheduledAt != null) return -1;
+      if (b.scheduledAt != null) return 1;
+
+      // Finally: by ID for consistency
+      return a.id.compareTo(b.id);
+    });
+    return sorted;
+  }
 
   Future<void> loadTasks({bool forceRefresh = false}) async {
     if (_isLoading) {

@@ -33,12 +33,287 @@ class _TaskListScreenState extends State<TaskListScreen> {
   final List<_ChatMessage> _chatMessages = [];
   final TextEditingController _chatController = TextEditingController();
 
+  // Driver availability state
+  bool _isAvailable = false;
+  bool _availabilityLoading = false;
+
+  // Admin messages state
+  List<_AdminMessage> _adminMessages = const [];
+  int _unreadMessageCount = 0;
+
+  // Agentic AI notification state
+  String? _aiSuggestion;
+  bool _aiSuggestionLoading = false;
+  DateTime? _lastAiSuggestionTime;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskViewModel>().loadTasks();
+      _loadDriverStatus();
+      _loadAdminMessages();
+      _loadAiSuggestion(); // Load proactive AI suggestion
     });
+  }
+
+  Future<void> _loadDriverStatus() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      final config = context.read<AppConfig>();
+      final member = await client
+          .from('company_members')
+          .select('is_available')
+          .eq('user_id', user.id)
+          .eq('company_id', config.companyId)
+          .maybeSingle();
+
+      if (member != null && mounted) {
+        setState(() {
+          _isAvailable = member['is_available'] == true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load driver status: $e');
+    }
+  }
+
+  Future<void> _toggleAvailability() async {
+    setState(() => _availabilityLoading = true);
+    try {
+      final client = Supabase.instance.client;
+      final newStatus = !_isAvailable;
+
+      // Try RPC first, then fallback to direct update
+      try {
+        await client.rpc('update_driver_status', params: {
+          'p_is_available': newStatus,
+        });
+      } catch (e) {
+        // Fallback: direct update
+        final user = client.auth.currentUser;
+        if (user == null) throw Exception('Not authenticated');
+
+        final config = context.read<AppConfig>();
+        await client
+            .from('company_members')
+            .update({'is_available': newStatus})
+            .eq('user_id', user.id)
+            .eq('company_id', config.companyId);
+      }
+
+      if (mounted) {
+        setState(() => _isAvailable = newStatus);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              newStatus
+                  ? 'You are now available for deliveries'
+                  : 'You are now offline',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update status: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _availabilityLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadAdminMessages() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      final config = context.read<AppConfig>();
+
+      // Get driver's member ID
+      final member = await client
+          .from('company_members')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('company_id', config.companyId)
+          .maybeSingle();
+
+      if (member == null) return;
+      final driverId = member['id']?.toString();
+      if (driverId == null) return;
+
+      // Fetch messages for this driver (direct or broadcast)
+      final response = await client
+          .from('chat_messages')
+          .select('id, sender_id, message, is_broadcast, read_at, created_at')
+          .eq('company_id', config.companyId)
+          .or('recipient_id.eq.$driverId,is_broadcast.eq.true')
+          .order('created_at', ascending: false)
+          .limit(50);
+
+      if (mounted) {
+        final messages = (response as List).map((row) {
+          final map = row as Map<String, dynamic>;
+          return _AdminMessage(
+            id: map['id']?.toString() ?? '',
+            senderId: map['sender_id']?.toString() ?? '',
+            message: map['message']?.toString() ?? '',
+            isBroadcast: map['is_broadcast'] == true,
+            isRead: map['read_at'] != null,
+            createdAt: DateTime.tryParse(map['created_at']?.toString() ?? '') ??
+                DateTime.now(),
+          );
+        }).toList();
+
+        setState(() {
+          _adminMessages = messages;
+          _unreadMessageCount = messages.where((m) => !m.isRead).length;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load admin messages: $e');
+    }
+  }
+
+  void _openAdminMessagesDrawer() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _AdminMessagesSheet(
+        messages: _adminMessages,
+        onMarkRead: _markMessagesRead,
+        onRefresh: _loadAdminMessages,
+      ),
+    );
+  }
+
+  Future<void> _markMessagesRead() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+
+      final config = context.read<AppConfig>();
+
+      // Get driver's member ID
+      final member = await client
+          .from('company_members')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('company_id', config.companyId)
+          .maybeSingle();
+
+      if (member == null) return;
+      final driverId = member['id']?.toString();
+      if (driverId == null) return;
+
+      // Mark messages as read
+      await client
+          .from('chat_messages')
+          .update({'read_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('company_id', config.companyId)
+          .eq('recipient_id', driverId)
+          .isFilter('read_at', null);
+
+      setState(() => _unreadMessageCount = 0);
+    } catch (e) {
+      debugPrint('Failed to mark messages read: $e');
+    }
+  }
+
+  // ==========================================================================
+  // Agentic AI Proactive Suggestions
+  // ==========================================================================
+  Future<void> _loadAiSuggestion() async {
+    // Only refresh if more than 5 minutes since last suggestion
+    if (_lastAiSuggestionTime != null &&
+        DateTime.now().difference(_lastAiSuggestionTime!) <
+            const Duration(minutes: 5)) {
+      return;
+    }
+
+    final config = context.read<AppConfig>();
+    if (config.openRouterApiKey.isEmpty) return;
+
+    final viewModel = context.read<TaskViewModel>();
+    final tasks = viewModel.tasks;
+    if (tasks.isEmpty) return;
+
+    setState(() => _aiSuggestionLoading = true);
+
+    try {
+      final service = AiService(
+        apiKey: config.openRouterApiKey,
+        baseUrl: config.openRouterBaseUrl,
+        model: config.openRouterModel,
+      );
+
+      // Build context for AI
+      final pendingCount = tasks.where((t) => t.status == 'pending').length;
+      final inTransitCount =
+          tasks.where((t) => t.status == 'in-transit').length;
+      final deliveredCount = tasks.where((t) => t.status == 'delivered').length;
+      final now = DateTime.now();
+      final hour = now.hour;
+
+      String timeContext;
+      if (hour < 9) {
+        timeContext = 'early morning';
+      } else if (hour < 12) {
+        timeContext = 'morning';
+      } else if (hour < 17) {
+        timeContext = 'afternoon';
+      } else {
+        timeContext = 'evening';
+      }
+
+      final prompt =
+          '''You are a helpful delivery route assistant. Based on the current status, provide ONE short, actionable suggestion (max 50 words) to help the driver be more efficient.
+
+Current status:
+- Time: $timeContext
+- Pending deliveries: $pendingCount
+- In-transit: $inTransitCount
+- Completed today: $deliveredCount
+- Driver availability: ${_isAvailable ? 'Available' : 'Offline'}
+
+Respond with just the suggestion, no formatting or preamble.''';
+
+      final response = await service.chat([
+        {'role': 'user', 'content': prompt}
+      ]);
+      service.dispose();
+
+      if (mounted && response != null && !response.contains('failed')) {
+        setState(() {
+          _aiSuggestion = response.trim();
+          _lastAiSuggestionTime = DateTime.now();
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load AI suggestion: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _aiSuggestionLoading = false);
+      }
+    }
+  }
+
+  void _dismissAiSuggestion() {
+    setState(() => _aiSuggestion = null);
   }
 
   @override
@@ -52,7 +327,59 @@ class _TaskListScreenState extends State<TaskListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('OrderVista Dispatch'),
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: _availabilityLoading
+              ? const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : Switch(
+                  value: _isAvailable,
+                  onChanged: (_) => _toggleAvailability(),
+                  activeColor: Colors.green,
+                  inactiveThumbColor: Colors.grey,
+                ),
+        ),
         actions: [
+          // Admin messages with badge
+          Stack(
+            children: [
+              IconButton(
+                tooltip: 'Messages from admin',
+                onPressed: _openAdminMessagesDrawer,
+                icon: const Icon(Icons.notifications_outlined),
+              ),
+              if (_unreadMessageCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      _unreadMessageCount > 9 ? '9+' : '$_unreadMessageCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             tooltip: 'Admin portal',
             onPressed: () => context.push('/admin'),
@@ -87,7 +414,19 @@ class _TaskListScreenState extends State<TaskListScreen> {
           const _LastSyncedIndicator(),
         ],
       ),
-      body: const _TaskListBody(),
+      body: Column(
+        children: [
+          // AI Proactive Suggestion Card
+          if (_aiSuggestion != null)
+            _AiSuggestionCard(
+              suggestion: _aiSuggestion!,
+              onDismiss: _dismissAiSuggestion,
+              onRefresh: _loadAiSuggestion,
+            ),
+          if (_aiSuggestionLoading) const LinearProgressIndicator(),
+          const Expanded(child: _TaskListBody()),
+        ],
+      ),
     );
   }
 
@@ -722,7 +1061,7 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedTaskId,
+              initialValue: _selectedTaskId,
               items: tasks
                   .map(
                     (task) => DropdownMenuItem(
@@ -1206,6 +1545,97 @@ class _EngineerCredit extends StatelessWidget {
   }
 }
 
+class _AiSuggestionCard extends StatelessWidget {
+  const _AiSuggestionCard({
+    required this.suggestion,
+    required this.onDismiss,
+    required this.onRefresh,
+  });
+
+  final String suggestion;
+  final VoidCallback onDismiss;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.deepPurple.shade50,
+            Colors.blue.shade50,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.deepPurple.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.auto_awesome,
+              color: Colors.deepPurple,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI Suggestion',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  suggestion,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            children: [
+              InkWell(
+                onTap: onDismiss,
+                borderRadius: BorderRadius.circular(12),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 18, color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 4),
+              InkWell(
+                onTap: onRefresh,
+                borderRadius: BorderRadius.circular(12),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.refresh, size: 18, color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TaskMapPreview extends StatefulWidget {
   const _TaskMapPreview({
     required this.address,
@@ -1328,6 +1758,177 @@ class _MapPlaceholder extends StatelessWidget {
         message,
         style: theme.textTheme.bodySmall,
       ),
+    );
+  }
+}
+
+// ===========================================================================
+// Admin Messages
+// ===========================================================================
+
+class _AdminMessage {
+  const _AdminMessage({
+    required this.id,
+    required this.senderId,
+    required this.message,
+    required this.isBroadcast,
+    required this.isRead,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String senderId;
+  final String message;
+  final bool isBroadcast;
+  final bool isRead;
+  final DateTime createdAt;
+}
+
+class _AdminMessagesSheet extends StatelessWidget {
+  const _AdminMessagesSheet({
+    required this.messages,
+    required this.onMarkRead,
+    required this.onRefresh,
+  });
+
+  final List<_AdminMessage> messages;
+  final VoidCallback onMarkRead;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Text(
+                    'Messages from Admin',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      onMarkRead();
+                      onRefresh();
+                    },
+                    child: const Text('Mark all read'),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: messages.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: messages.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final msg = messages[index];
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: msg.isRead
+                                ? Colors.grey.shade50
+                                : Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: msg.isRead
+                                  ? Colors.grey.shade200
+                                  : Colors.blue.shade200,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    msg.isBroadcast
+                                        ? Icons.campaign
+                                        : Icons.person,
+                                    size: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    msg.isBroadcast
+                                        ? 'Broadcast'
+                                        : 'Direct message',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    DateFormat('MMM d • HH:mm')
+                                        .format(msg.createdAt.toLocal()),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                msg.message,
+                                style: const TextStyle(fontSize: 15),
+                              ),
+                              if (!msg.isRead)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'NEW',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -4,6 +4,7 @@ class DeliveryTask {
     required this.address,
     required this.status,
     this.scheduledAt,
+    this.priority = 0,
     this.proofCode,
     this.proofPhotoUrl,
   });
@@ -12,6 +13,7 @@ class DeliveryTask {
   final String address;
   final String status;
   final DateTime? scheduledAt;
+  final int priority;
   final String? proofCode;
   final String? proofPhotoUrl;
 
@@ -20,6 +22,7 @@ class DeliveryTask {
     String? address,
     String? status,
     DateTime? scheduledAt,
+    int? priority,
     String? proofCode,
     String? proofPhotoUrl,
   }) {
@@ -28,6 +31,7 @@ class DeliveryTask {
       address: address ?? this.address,
       status: status ?? this.status,
       scheduledAt: scheduledAt ?? this.scheduledAt,
+      priority: priority ?? this.priority,
       proofCode: proofCode ?? this.proofCode,
       proofPhotoUrl: proofPhotoUrl ?? this.proofPhotoUrl,
     );
@@ -40,9 +44,14 @@ class DeliveryTask {
       status: json['status']?.toString() ?? 'pending',
       scheduledAt: json['scheduledAt'] != null
           ? DateTime.tryParse(json['scheduledAt'].toString())
-          : null,
-      proofCode: json['proofCode']?.toString(),
-      proofPhotoUrl: json['proofPhotoUrl']?.toString(),
+          : (json['scheduled_start'] != null
+              ? DateTime.tryParse(json['scheduled_start'].toString())
+              : null),
+      priority: (json['priority'] as num?)?.toInt() ?? 0,
+      proofCode:
+          json['proofCode']?.toString() ?? json['proof_code']?.toString(),
+      proofPhotoUrl: json['proofPhotoUrl']?.toString() ??
+          json['proof_photo_url']?.toString(),
     );
   }
 
@@ -52,6 +61,7 @@ class DeliveryTask {
       'address': address,
       'status': status,
       if (scheduledAt != null) 'scheduledAt': scheduledAt!.toIso8601String(),
+      'priority': priority,
       if (proofCode != null && proofCode!.isNotEmpty) 'proofCode': proofCode,
       if (proofPhotoUrl != null && proofPhotoUrl!.isNotEmpty)
         'proofPhotoUrl': proofPhotoUrl,

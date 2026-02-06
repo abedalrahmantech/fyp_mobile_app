@@ -218,6 +218,7 @@ class TaskService {
       address: row['address']?.toString() ?? 'Unknown address',
       status: row['status']?.toString() ?? 'pending',
       scheduledAt: _parseDate(row['scheduled_start']),
+      priority: (row['priority'] as num?)?.toInt() ?? 0,
       proofCode: row['proof_code']?.toString(),
       proofPhotoUrl: row['proof_photo_url']?.toString(),
     );

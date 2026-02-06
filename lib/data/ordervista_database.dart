@@ -14,6 +14,7 @@ class DriftTasks extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get proofCode => text().nullable()();
   TextColumn get proofPhotoUrl => text().nullable()();
+  IntColumn get priority => integer().withDefault(const Constant(0))();
   DateTimeColumn get scheduledStart => dateTime().nullable()();
   DateTimeColumn get scheduledEnd => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -75,5 +76,20 @@ class OrderVistaDatabase extends _$OrderVistaDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 2) {
+          // Add priority column to drift_tasks table
+          await m.addColumn(driftTasks, driftTasks.priority);
+        }
+      },
+    );
+  }
 }

@@ -48,6 +48,14 @@ class $DriftTasksTable extends DriftTasks
   late final GeneratedColumn<String> proofPhotoUrl = GeneratedColumn<String>(
       'proof_photo_url', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _priorityMeta =
+      const VerificationMeta('priority');
+  @override
+  late final GeneratedColumn<int> priority = GeneratedColumn<int>(
+      'priority', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _scheduledStartMeta =
       const VerificationMeta('scheduledStart');
   @override
@@ -75,6 +83,7 @@ class $DriftTasksTable extends DriftTasks
         notes,
         proofCode,
         proofPhotoUrl,
+        priority,
         scheduledStart,
         scheduledEnd,
         updatedAt
@@ -126,6 +135,10 @@ class $DriftTasksTable extends DriftTasks
           proofPhotoUrl.isAcceptableOrUnknown(
               data['proof_photo_url']!, _proofPhotoUrlMeta));
     }
+    if (data.containsKey('priority')) {
+      context.handle(_priorityMeta,
+          priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta));
+    }
     if (data.containsKey('scheduled_start')) {
       context.handle(
           _scheduledStartMeta,
@@ -167,6 +180,8 @@ class $DriftTasksTable extends DriftTasks
           .read(DriftSqlType.string, data['${effectivePrefix}proof_code']),
       proofPhotoUrl: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}proof_photo_url']),
+      priority: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}priority'])!,
       scheduledStart: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime, data['${effectivePrefix}scheduled_start']),
       scheduledEnd: attachedDatabase.typeMapping
@@ -190,6 +205,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
   final String? notes;
   final String? proofCode;
   final String? proofPhotoUrl;
+  final int priority;
   final DateTime? scheduledStart;
   final DateTime? scheduledEnd;
   final DateTime updatedAt;
@@ -201,6 +217,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
       this.notes,
       this.proofCode,
       this.proofPhotoUrl,
+      required this.priority,
       this.scheduledStart,
       this.scheduledEnd,
       required this.updatedAt});
@@ -220,6 +237,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
     if (!nullToAbsent || proofPhotoUrl != null) {
       map['proof_photo_url'] = Variable<String>(proofPhotoUrl);
     }
+    map['priority'] = Variable<int>(priority);
     if (!nullToAbsent || scheduledStart != null) {
       map['scheduled_start'] = Variable<DateTime>(scheduledStart);
     }
@@ -244,6 +262,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
       proofPhotoUrl: proofPhotoUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(proofPhotoUrl),
+      priority: Value(priority),
       scheduledStart: scheduledStart == null && nullToAbsent
           ? const Value.absent()
           : Value(scheduledStart),
@@ -265,6 +284,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
       notes: serializer.fromJson<String?>(json['notes']),
       proofCode: serializer.fromJson<String?>(json['proofCode']),
       proofPhotoUrl: serializer.fromJson<String?>(json['proofPhotoUrl']),
+      priority: serializer.fromJson<int>(json['priority']),
       scheduledStart: serializer.fromJson<DateTime?>(json['scheduledStart']),
       scheduledEnd: serializer.fromJson<DateTime?>(json['scheduledEnd']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -281,6 +301,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
       'notes': serializer.toJson<String?>(notes),
       'proofCode': serializer.toJson<String?>(proofCode),
       'proofPhotoUrl': serializer.toJson<String?>(proofPhotoUrl),
+      'priority': serializer.toJson<int>(priority),
       'scheduledStart': serializer.toJson<DateTime?>(scheduledStart),
       'scheduledEnd': serializer.toJson<DateTime?>(scheduledEnd),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -295,6 +316,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
           Value<String?> notes = const Value.absent(),
           Value<String?> proofCode = const Value.absent(),
           Value<String?> proofPhotoUrl = const Value.absent(),
+          int? priority,
           Value<DateTime?> scheduledStart = const Value.absent(),
           Value<DateTime?> scheduledEnd = const Value.absent(),
           DateTime? updatedAt}) =>
@@ -307,12 +329,35 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
         proofCode: proofCode.present ? proofCode.value : this.proofCode,
         proofPhotoUrl:
             proofPhotoUrl.present ? proofPhotoUrl.value : this.proofPhotoUrl,
+        priority: priority ?? this.priority,
         scheduledStart:
             scheduledStart.present ? scheduledStart.value : this.scheduledStart,
         scheduledEnd:
             scheduledEnd.present ? scheduledEnd.value : this.scheduledEnd,
         updatedAt: updatedAt ?? this.updatedAt,
       );
+  DriftTask copyWithCompanion(DriftTasksCompanion data) {
+    return DriftTask(
+      id: data.id.present ? data.id.value : this.id,
+      companyId: data.companyId.present ? data.companyId.value : this.companyId,
+      address: data.address.present ? data.address.value : this.address,
+      status: data.status.present ? data.status.value : this.status,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      proofCode: data.proofCode.present ? data.proofCode.value : this.proofCode,
+      proofPhotoUrl: data.proofPhotoUrl.present
+          ? data.proofPhotoUrl.value
+          : this.proofPhotoUrl,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      scheduledStart: data.scheduledStart.present
+          ? data.scheduledStart.value
+          : this.scheduledStart,
+      scheduledEnd: data.scheduledEnd.present
+          ? data.scheduledEnd.value
+          : this.scheduledEnd,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
   @override
   String toString() {
     return (StringBuffer('DriftTask(')
@@ -323,6 +368,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
           ..write('notes: $notes, ')
           ..write('proofCode: $proofCode, ')
           ..write('proofPhotoUrl: $proofPhotoUrl, ')
+          ..write('priority: $priority, ')
           ..write('scheduledStart: $scheduledStart, ')
           ..write('scheduledEnd: $scheduledEnd, ')
           ..write('updatedAt: $updatedAt')
@@ -331,8 +377,18 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
   }
 
   @override
-  int get hashCode => Object.hash(id, companyId, address, status, notes,
-      proofCode, proofPhotoUrl, scheduledStart, scheduledEnd, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      companyId,
+      address,
+      status,
+      notes,
+      proofCode,
+      proofPhotoUrl,
+      priority,
+      scheduledStart,
+      scheduledEnd,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -344,6 +400,7 @@ class DriftTask extends DataClass implements Insertable<DriftTask> {
           other.notes == this.notes &&
           other.proofCode == this.proofCode &&
           other.proofPhotoUrl == this.proofPhotoUrl &&
+          other.priority == this.priority &&
           other.scheduledStart == this.scheduledStart &&
           other.scheduledEnd == this.scheduledEnd &&
           other.updatedAt == this.updatedAt);
@@ -357,6 +414,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
   final Value<String?> notes;
   final Value<String?> proofCode;
   final Value<String?> proofPhotoUrl;
+  final Value<int> priority;
   final Value<DateTime?> scheduledStart;
   final Value<DateTime?> scheduledEnd;
   final Value<DateTime> updatedAt;
@@ -369,6 +427,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
     this.notes = const Value.absent(),
     this.proofCode = const Value.absent(),
     this.proofPhotoUrl = const Value.absent(),
+    this.priority = const Value.absent(),
     this.scheduledStart = const Value.absent(),
     this.scheduledEnd = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -382,6 +441,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
     this.notes = const Value.absent(),
     this.proofCode = const Value.absent(),
     this.proofPhotoUrl = const Value.absent(),
+    this.priority = const Value.absent(),
     this.scheduledStart = const Value.absent(),
     this.scheduledEnd = const Value.absent(),
     required DateTime updatedAt,
@@ -399,6 +459,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
     Expression<String>? notes,
     Expression<String>? proofCode,
     Expression<String>? proofPhotoUrl,
+    Expression<int>? priority,
     Expression<DateTime>? scheduledStart,
     Expression<DateTime>? scheduledEnd,
     Expression<DateTime>? updatedAt,
@@ -412,6 +473,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
       if (notes != null) 'notes': notes,
       if (proofCode != null) 'proof_code': proofCode,
       if (proofPhotoUrl != null) 'proof_photo_url': proofPhotoUrl,
+      if (priority != null) 'priority': priority,
       if (scheduledStart != null) 'scheduled_start': scheduledStart,
       if (scheduledEnd != null) 'scheduled_end': scheduledEnd,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -427,6 +489,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
       Value<String?>? notes,
       Value<String?>? proofCode,
       Value<String?>? proofPhotoUrl,
+      Value<int>? priority,
       Value<DateTime?>? scheduledStart,
       Value<DateTime?>? scheduledEnd,
       Value<DateTime>? updatedAt,
@@ -439,6 +502,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
       notes: notes ?? this.notes,
       proofCode: proofCode ?? this.proofCode,
       proofPhotoUrl: proofPhotoUrl ?? this.proofPhotoUrl,
+      priority: priority ?? this.priority,
       scheduledStart: scheduledStart ?? this.scheduledStart,
       scheduledEnd: scheduledEnd ?? this.scheduledEnd,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -470,6 +534,9 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
     if (proofPhotoUrl.present) {
       map['proof_photo_url'] = Variable<String>(proofPhotoUrl.value);
     }
+    if (priority.present) {
+      map['priority'] = Variable<int>(priority.value);
+    }
     if (scheduledStart.present) {
       map['scheduled_start'] = Variable<DateTime>(scheduledStart.value);
     }
@@ -495,6 +562,7 @@ class DriftTasksCompanion extends UpdateCompanion<DriftTask> {
           ..write('notes: $notes, ')
           ..write('proofCode: $proofCode, ')
           ..write('proofPhotoUrl: $proofPhotoUrl, ')
+          ..write('priority: $priority, ')
           ..write('scheduledStart: $scheduledStart, ')
           ..write('scheduledEnd: $scheduledEnd, ')
           ..write('updatedAt: $updatedAt, ')
@@ -761,6 +829,20 @@ class DriftRoute extends DataClass implements Insertable<DriftRoute> {
         completedAt: completedAt.present ? completedAt.value : this.completedAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
+  DriftRoute copyWithCompanion(DriftRoutesCompanion data) {
+    return DriftRoute(
+      id: data.id.present ? data.id.value : this.id,
+      companyId: data.companyId.present ? data.companyId.value : this.companyId,
+      status: data.status.present ? data.status.value : this.status,
+      driverId: data.driverId.present ? data.driverId.value : this.driverId,
+      vehicleId: data.vehicleId.present ? data.vehicleId.value : this.vehicleId,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      completedAt:
+          data.completedAt.present ? data.completedAt.value : this.completedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
   @override
   String toString() {
     return (StringBuffer('DriftRoute(')
@@ -1114,6 +1196,20 @@ class DriftRouteTask extends DataClass implements Insertable<DriftRouteTask> {
             ? travelDistanceMeters.value
             : this.travelDistanceMeters,
       );
+  DriftRouteTask copyWithCompanion(DriftRouteTasksCompanion data) {
+    return DriftRouteTask(
+      sequence: data.sequence.present ? data.sequence.value : this.sequence,
+      routeId: data.routeId.present ? data.routeId.value : this.routeId,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      travelDurationSeconds: data.travelDurationSeconds.present
+          ? data.travelDurationSeconds.value
+          : this.travelDurationSeconds,
+      travelDistanceMeters: data.travelDistanceMeters.present
+          ? data.travelDistanceMeters.value
+          : this.travelDistanceMeters,
+    );
+  }
+
   @override
   String toString() {
     return (StringBuffer('DriftRouteTask(')
@@ -1524,6 +1620,24 @@ class DriftSyncQueueData extends DataClass
             lastAttemptAt.present ? lastAttemptAt.value : this.lastAttemptAt,
         createdAt: createdAt ?? this.createdAt,
       );
+  DriftSyncQueueData copyWithCompanion(DriftSyncQueueCompanion data) {
+    return DriftSyncQueueData(
+      id: data.id.present ? data.id.value : this.id,
+      companyId: data.companyId.present ? data.companyId.value : this.companyId,
+      driverId: data.driverId.present ? data.driverId.value : this.driverId,
+      actionType:
+          data.actionType.present ? data.actionType.value : this.actionType,
+      payloadJson:
+          data.payloadJson.present ? data.payloadJson.value : this.payloadJson,
+      status: data.status.present ? data.status.value : this.status,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      lastAttemptAt: data.lastAttemptAt.present
+          ? data.lastAttemptAt.value
+          : this.lastAttemptAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
   @override
   String toString() {
     return (StringBuffer('DriftSyncQueueData(')
@@ -1692,6 +1806,7 @@ class DriftSyncQueueCompanion extends UpdateCompanion<DriftSyncQueueData> {
 
 abstract class _$OrderVistaDatabase extends GeneratedDatabase {
   _$OrderVistaDatabase(QueryExecutor e) : super(e);
+  $OrderVistaDatabaseManager get managers => $OrderVistaDatabaseManager(this);
   late final $DriftTasksTable driftTasks = $DriftTasksTable(this);
   late final $DriftRoutesTable driftRoutes = $DriftRoutesTable(this);
   late final $DriftRouteTasksTable driftRouteTasks =
@@ -1703,4 +1818,913 @@ abstract class _$OrderVistaDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
       [driftTasks, driftRoutes, driftRouteTasks, driftSyncQueue];
+}
+
+typedef $$DriftTasksTableCreateCompanionBuilder = DriftTasksCompanion Function({
+  required String id,
+  required String companyId,
+  required String address,
+  required String status,
+  Value<String?> notes,
+  Value<String?> proofCode,
+  Value<String?> proofPhotoUrl,
+  Value<int> priority,
+  Value<DateTime?> scheduledStart,
+  Value<DateTime?> scheduledEnd,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$DriftTasksTableUpdateCompanionBuilder = DriftTasksCompanion Function({
+  Value<String> id,
+  Value<String> companyId,
+  Value<String> address,
+  Value<String> status,
+  Value<String?> notes,
+  Value<String?> proofCode,
+  Value<String?> proofPhotoUrl,
+  Value<int> priority,
+  Value<DateTime?> scheduledStart,
+  Value<DateTime?> scheduledEnd,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$DriftTasksTableFilterComposer
+    extends Composer<_$OrderVistaDatabase, $DriftTasksTable> {
+  $$DriftTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get companyId => $composableBuilder(
+      column: $table.companyId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get address => $composableBuilder(
+      column: $table.address, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get proofCode => $composableBuilder(
+      column: $table.proofCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get proofPhotoUrl => $composableBuilder(
+      column: $table.proofPhotoUrl, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get priority => $composableBuilder(
+      column: $table.priority, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get scheduledStart => $composableBuilder(
+      column: $table.scheduledStart,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get scheduledEnd => $composableBuilder(
+      column: $table.scheduledEnd, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$DriftTasksTableOrderingComposer
+    extends Composer<_$OrderVistaDatabase, $DriftTasksTable> {
+  $$DriftTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get companyId => $composableBuilder(
+      column: $table.companyId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get address => $composableBuilder(
+      column: $table.address, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+      column: $table.notes, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get proofCode => $composableBuilder(
+      column: $table.proofCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get proofPhotoUrl => $composableBuilder(
+      column: $table.proofPhotoUrl,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get priority => $composableBuilder(
+      column: $table.priority, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get scheduledStart => $composableBuilder(
+      column: $table.scheduledStart,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get scheduledEnd => $composableBuilder(
+      column: $table.scheduledEnd,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DriftTasksTableAnnotationComposer
+    extends Composer<_$OrderVistaDatabase, $DriftTasksTable> {
+  $$DriftTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get companyId =>
+      $composableBuilder(column: $table.companyId, builder: (column) => column);
+
+  GeneratedColumn<String> get address =>
+      $composableBuilder(column: $table.address, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get proofCode =>
+      $composableBuilder(column: $table.proofCode, builder: (column) => column);
+
+  GeneratedColumn<String> get proofPhotoUrl => $composableBuilder(
+      column: $table.proofPhotoUrl, builder: (column) => column);
+
+  GeneratedColumn<int> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get scheduledStart => $composableBuilder(
+      column: $table.scheduledStart, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get scheduledEnd => $composableBuilder(
+      column: $table.scheduledEnd, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DriftTasksTableTableManager extends RootTableManager<
+    _$OrderVistaDatabase,
+    $DriftTasksTable,
+    DriftTask,
+    $$DriftTasksTableFilterComposer,
+    $$DriftTasksTableOrderingComposer,
+    $$DriftTasksTableAnnotationComposer,
+    $$DriftTasksTableCreateCompanionBuilder,
+    $$DriftTasksTableUpdateCompanionBuilder,
+    (
+      DriftTask,
+      BaseReferences<_$OrderVistaDatabase, $DriftTasksTable, DriftTask>
+    ),
+    DriftTask,
+    PrefetchHooks Function()> {
+  $$DriftTasksTableTableManager(_$OrderVistaDatabase db, $DriftTasksTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriftTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriftTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DriftTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> companyId = const Value.absent(),
+            Value<String> address = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            Value<String?> proofCode = const Value.absent(),
+            Value<String?> proofPhotoUrl = const Value.absent(),
+            Value<int> priority = const Value.absent(),
+            Value<DateTime?> scheduledStart = const Value.absent(),
+            Value<DateTime?> scheduledEnd = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DriftTasksCompanion(
+            id: id,
+            companyId: companyId,
+            address: address,
+            status: status,
+            notes: notes,
+            proofCode: proofCode,
+            proofPhotoUrl: proofPhotoUrl,
+            priority: priority,
+            scheduledStart: scheduledStart,
+            scheduledEnd: scheduledEnd,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String companyId,
+            required String address,
+            required String status,
+            Value<String?> notes = const Value.absent(),
+            Value<String?> proofCode = const Value.absent(),
+            Value<String?> proofPhotoUrl = const Value.absent(),
+            Value<int> priority = const Value.absent(),
+            Value<DateTime?> scheduledStart = const Value.absent(),
+            Value<DateTime?> scheduledEnd = const Value.absent(),
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DriftTasksCompanion.insert(
+            id: id,
+            companyId: companyId,
+            address: address,
+            status: status,
+            notes: notes,
+            proofCode: proofCode,
+            proofPhotoUrl: proofPhotoUrl,
+            priority: priority,
+            scheduledStart: scheduledStart,
+            scheduledEnd: scheduledEnd,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DriftTasksTableProcessedTableManager = ProcessedTableManager<
+    _$OrderVistaDatabase,
+    $DriftTasksTable,
+    DriftTask,
+    $$DriftTasksTableFilterComposer,
+    $$DriftTasksTableOrderingComposer,
+    $$DriftTasksTableAnnotationComposer,
+    $$DriftTasksTableCreateCompanionBuilder,
+    $$DriftTasksTableUpdateCompanionBuilder,
+    (
+      DriftTask,
+      BaseReferences<_$OrderVistaDatabase, $DriftTasksTable, DriftTask>
+    ),
+    DriftTask,
+    PrefetchHooks Function()>;
+typedef $$DriftRoutesTableCreateCompanionBuilder = DriftRoutesCompanion
+    Function({
+  required String id,
+  required String companyId,
+  required String status,
+  Value<String?> driverId,
+  Value<String?> vehicleId,
+  Value<DateTime?> startedAt,
+  Value<DateTime?> completedAt,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$DriftRoutesTableUpdateCompanionBuilder = DriftRoutesCompanion
+    Function({
+  Value<String> id,
+  Value<String> companyId,
+  Value<String> status,
+  Value<String?> driverId,
+  Value<String?> vehicleId,
+  Value<DateTime?> startedAt,
+  Value<DateTime?> completedAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$DriftRoutesTableFilterComposer
+    extends Composer<_$OrderVistaDatabase, $DriftRoutesTable> {
+  $$DriftRoutesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get companyId => $composableBuilder(
+      column: $table.companyId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get driverId => $composableBuilder(
+      column: $table.driverId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get vehicleId => $composableBuilder(
+      column: $table.vehicleId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+      column: $table.completedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$DriftRoutesTableOrderingComposer
+    extends Composer<_$OrderVistaDatabase, $DriftRoutesTable> {
+  $$DriftRoutesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get companyId => $composableBuilder(
+      column: $table.companyId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get driverId => $composableBuilder(
+      column: $table.driverId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get vehicleId => $composableBuilder(
+      column: $table.vehicleId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+      column: $table.completedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DriftRoutesTableAnnotationComposer
+    extends Composer<_$OrderVistaDatabase, $DriftRoutesTable> {
+  $$DriftRoutesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get companyId =>
+      $composableBuilder(column: $table.companyId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get driverId =>
+      $composableBuilder(column: $table.driverId, builder: (column) => column);
+
+  GeneratedColumn<String> get vehicleId =>
+      $composableBuilder(column: $table.vehicleId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+      column: $table.completedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DriftRoutesTableTableManager extends RootTableManager<
+    _$OrderVistaDatabase,
+    $DriftRoutesTable,
+    DriftRoute,
+    $$DriftRoutesTableFilterComposer,
+    $$DriftRoutesTableOrderingComposer,
+    $$DriftRoutesTableAnnotationComposer,
+    $$DriftRoutesTableCreateCompanionBuilder,
+    $$DriftRoutesTableUpdateCompanionBuilder,
+    (
+      DriftRoute,
+      BaseReferences<_$OrderVistaDatabase, $DriftRoutesTable, DriftRoute>
+    ),
+    DriftRoute,
+    PrefetchHooks Function()> {
+  $$DriftRoutesTableTableManager(
+      _$OrderVistaDatabase db, $DriftRoutesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriftRoutesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriftRoutesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DriftRoutesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> companyId = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> driverId = const Value.absent(),
+            Value<String?> vehicleId = const Value.absent(),
+            Value<DateTime?> startedAt = const Value.absent(),
+            Value<DateTime?> completedAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DriftRoutesCompanion(
+            id: id,
+            companyId: companyId,
+            status: status,
+            driverId: driverId,
+            vehicleId: vehicleId,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String companyId,
+            required String status,
+            Value<String?> driverId = const Value.absent(),
+            Value<String?> vehicleId = const Value.absent(),
+            Value<DateTime?> startedAt = const Value.absent(),
+            Value<DateTime?> completedAt = const Value.absent(),
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DriftRoutesCompanion.insert(
+            id: id,
+            companyId: companyId,
+            status: status,
+            driverId: driverId,
+            vehicleId: vehicleId,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DriftRoutesTableProcessedTableManager = ProcessedTableManager<
+    _$OrderVistaDatabase,
+    $DriftRoutesTable,
+    DriftRoute,
+    $$DriftRoutesTableFilterComposer,
+    $$DriftRoutesTableOrderingComposer,
+    $$DriftRoutesTableAnnotationComposer,
+    $$DriftRoutesTableCreateCompanionBuilder,
+    $$DriftRoutesTableUpdateCompanionBuilder,
+    (
+      DriftRoute,
+      BaseReferences<_$OrderVistaDatabase, $DriftRoutesTable, DriftRoute>
+    ),
+    DriftRoute,
+    PrefetchHooks Function()>;
+typedef $$DriftRouteTasksTableCreateCompanionBuilder = DriftRouteTasksCompanion
+    Function({
+  required int sequence,
+  required String routeId,
+  required String taskId,
+  Value<int?> travelDurationSeconds,
+  Value<int?> travelDistanceMeters,
+  Value<int> rowid,
+});
+typedef $$DriftRouteTasksTableUpdateCompanionBuilder = DriftRouteTasksCompanion
+    Function({
+  Value<int> sequence,
+  Value<String> routeId,
+  Value<String> taskId,
+  Value<int?> travelDurationSeconds,
+  Value<int?> travelDistanceMeters,
+  Value<int> rowid,
+});
+
+class $$DriftRouteTasksTableFilterComposer
+    extends Composer<_$OrderVistaDatabase, $DriftRouteTasksTable> {
+  $$DriftRouteTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get sequence => $composableBuilder(
+      column: $table.sequence, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get routeId => $composableBuilder(
+      column: $table.routeId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get travelDurationSeconds => $composableBuilder(
+      column: $table.travelDurationSeconds,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get travelDistanceMeters => $composableBuilder(
+      column: $table.travelDistanceMeters,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$DriftRouteTasksTableOrderingComposer
+    extends Composer<_$OrderVistaDatabase, $DriftRouteTasksTable> {
+  $$DriftRouteTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get sequence => $composableBuilder(
+      column: $table.sequence, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get routeId => $composableBuilder(
+      column: $table.routeId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get travelDurationSeconds => $composableBuilder(
+      column: $table.travelDurationSeconds,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get travelDistanceMeters => $composableBuilder(
+      column: $table.travelDistanceMeters,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$DriftRouteTasksTableAnnotationComposer
+    extends Composer<_$OrderVistaDatabase, $DriftRouteTasksTable> {
+  $$DriftRouteTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get sequence =>
+      $composableBuilder(column: $table.sequence, builder: (column) => column);
+
+  GeneratedColumn<String> get routeId =>
+      $composableBuilder(column: $table.routeId, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<int> get travelDurationSeconds => $composableBuilder(
+      column: $table.travelDurationSeconds, builder: (column) => column);
+
+  GeneratedColumn<int> get travelDistanceMeters => $composableBuilder(
+      column: $table.travelDistanceMeters, builder: (column) => column);
+}
+
+class $$DriftRouteTasksTableTableManager extends RootTableManager<
+    _$OrderVistaDatabase,
+    $DriftRouteTasksTable,
+    DriftRouteTask,
+    $$DriftRouteTasksTableFilterComposer,
+    $$DriftRouteTasksTableOrderingComposer,
+    $$DriftRouteTasksTableAnnotationComposer,
+    $$DriftRouteTasksTableCreateCompanionBuilder,
+    $$DriftRouteTasksTableUpdateCompanionBuilder,
+    (
+      DriftRouteTask,
+      BaseReferences<_$OrderVistaDatabase, $DriftRouteTasksTable,
+          DriftRouteTask>
+    ),
+    DriftRouteTask,
+    PrefetchHooks Function()> {
+  $$DriftRouteTasksTableTableManager(
+      _$OrderVistaDatabase db, $DriftRouteTasksTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriftRouteTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriftRouteTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DriftRouteTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> sequence = const Value.absent(),
+            Value<String> routeId = const Value.absent(),
+            Value<String> taskId = const Value.absent(),
+            Value<int?> travelDurationSeconds = const Value.absent(),
+            Value<int?> travelDistanceMeters = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DriftRouteTasksCompanion(
+            sequence: sequence,
+            routeId: routeId,
+            taskId: taskId,
+            travelDurationSeconds: travelDurationSeconds,
+            travelDistanceMeters: travelDistanceMeters,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required int sequence,
+            required String routeId,
+            required String taskId,
+            Value<int?> travelDurationSeconds = const Value.absent(),
+            Value<int?> travelDistanceMeters = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DriftRouteTasksCompanion.insert(
+            sequence: sequence,
+            routeId: routeId,
+            taskId: taskId,
+            travelDurationSeconds: travelDurationSeconds,
+            travelDistanceMeters: travelDistanceMeters,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DriftRouteTasksTableProcessedTableManager = ProcessedTableManager<
+    _$OrderVistaDatabase,
+    $DriftRouteTasksTable,
+    DriftRouteTask,
+    $$DriftRouteTasksTableFilterComposer,
+    $$DriftRouteTasksTableOrderingComposer,
+    $$DriftRouteTasksTableAnnotationComposer,
+    $$DriftRouteTasksTableCreateCompanionBuilder,
+    $$DriftRouteTasksTableUpdateCompanionBuilder,
+    (
+      DriftRouteTask,
+      BaseReferences<_$OrderVistaDatabase, $DriftRouteTasksTable,
+          DriftRouteTask>
+    ),
+    DriftRouteTask,
+    PrefetchHooks Function()>;
+typedef $$DriftSyncQueueTableCreateCompanionBuilder = DriftSyncQueueCompanion
+    Function({
+  Value<int> id,
+  required String companyId,
+  required String driverId,
+  required String actionType,
+  required String payloadJson,
+  Value<String> status,
+  Value<int> attempts,
+  Value<DateTime?> lastAttemptAt,
+  Value<DateTime> createdAt,
+});
+typedef $$DriftSyncQueueTableUpdateCompanionBuilder = DriftSyncQueueCompanion
+    Function({
+  Value<int> id,
+  Value<String> companyId,
+  Value<String> driverId,
+  Value<String> actionType,
+  Value<String> payloadJson,
+  Value<String> status,
+  Value<int> attempts,
+  Value<DateTime?> lastAttemptAt,
+  Value<DateTime> createdAt,
+});
+
+class $$DriftSyncQueueTableFilterComposer
+    extends Composer<_$OrderVistaDatabase, $DriftSyncQueueTable> {
+  $$DriftSyncQueueTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get companyId => $composableBuilder(
+      column: $table.companyId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get driverId => $composableBuilder(
+      column: $table.driverId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get actionType => $composableBuilder(
+      column: $table.actionType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+      column: $table.attempts, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
+      column: $table.lastAttemptAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$DriftSyncQueueTableOrderingComposer
+    extends Composer<_$OrderVistaDatabase, $DriftSyncQueueTable> {
+  $$DriftSyncQueueTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get companyId => $composableBuilder(
+      column: $table.companyId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get driverId => $composableBuilder(
+      column: $table.driverId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get actionType => $composableBuilder(
+      column: $table.actionType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+      column: $table.attempts, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastAttemptAt => $composableBuilder(
+      column: $table.lastAttemptAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DriftSyncQueueTableAnnotationComposer
+    extends Composer<_$OrderVistaDatabase, $DriftSyncQueueTable> {
+  $$DriftSyncQueueTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get companyId =>
+      $composableBuilder(column: $table.companyId, builder: (column) => column);
+
+  GeneratedColumn<String> get driverId =>
+      $composableBuilder(column: $table.driverId, builder: (column) => column);
+
+  GeneratedColumn<String> get actionType => $composableBuilder(
+      column: $table.actionType, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastAttemptAt => $composableBuilder(
+      column: $table.lastAttemptAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$DriftSyncQueueTableTableManager extends RootTableManager<
+    _$OrderVistaDatabase,
+    $DriftSyncQueueTable,
+    DriftSyncQueueData,
+    $$DriftSyncQueueTableFilterComposer,
+    $$DriftSyncQueueTableOrderingComposer,
+    $$DriftSyncQueueTableAnnotationComposer,
+    $$DriftSyncQueueTableCreateCompanionBuilder,
+    $$DriftSyncQueueTableUpdateCompanionBuilder,
+    (
+      DriftSyncQueueData,
+      BaseReferences<_$OrderVistaDatabase, $DriftSyncQueueTable,
+          DriftSyncQueueData>
+    ),
+    DriftSyncQueueData,
+    PrefetchHooks Function()> {
+  $$DriftSyncQueueTableTableManager(
+      _$OrderVistaDatabase db, $DriftSyncQueueTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DriftSyncQueueTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DriftSyncQueueTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DriftSyncQueueTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> companyId = const Value.absent(),
+            Value<String> driverId = const Value.absent(),
+            Value<String> actionType = const Value.absent(),
+            Value<String> payloadJson = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int> attempts = const Value.absent(),
+            Value<DateTime?> lastAttemptAt = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+          }) =>
+              DriftSyncQueueCompanion(
+            id: id,
+            companyId: companyId,
+            driverId: driverId,
+            actionType: actionType,
+            payloadJson: payloadJson,
+            status: status,
+            attempts: attempts,
+            lastAttemptAt: lastAttemptAt,
+            createdAt: createdAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String companyId,
+            required String driverId,
+            required String actionType,
+            required String payloadJson,
+            Value<String> status = const Value.absent(),
+            Value<int> attempts = const Value.absent(),
+            Value<DateTime?> lastAttemptAt = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+          }) =>
+              DriftSyncQueueCompanion.insert(
+            id: id,
+            companyId: companyId,
+            driverId: driverId,
+            actionType: actionType,
+            payloadJson: payloadJson,
+            status: status,
+            attempts: attempts,
+            lastAttemptAt: lastAttemptAt,
+            createdAt: createdAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DriftSyncQueueTableProcessedTableManager = ProcessedTableManager<
+    _$OrderVistaDatabase,
+    $DriftSyncQueueTable,
+    DriftSyncQueueData,
+    $$DriftSyncQueueTableFilterComposer,
+    $$DriftSyncQueueTableOrderingComposer,
+    $$DriftSyncQueueTableAnnotationComposer,
+    $$DriftSyncQueueTableCreateCompanionBuilder,
+    $$DriftSyncQueueTableUpdateCompanionBuilder,
+    (
+      DriftSyncQueueData,
+      BaseReferences<_$OrderVistaDatabase, $DriftSyncQueueTable,
+          DriftSyncQueueData>
+    ),
+    DriftSyncQueueData,
+    PrefetchHooks Function()>;
+
+class $OrderVistaDatabaseManager {
+  final _$OrderVistaDatabase _db;
+  $OrderVistaDatabaseManager(this._db);
+  $$DriftTasksTableTableManager get driftTasks =>
+      $$DriftTasksTableTableManager(_db, _db.driftTasks);
+  $$DriftRoutesTableTableManager get driftRoutes =>
+      $$DriftRoutesTableTableManager(_db, _db.driftRoutes);
+  $$DriftRouteTasksTableTableManager get driftRouteTasks =>
+      $$DriftRouteTasksTableTableManager(_db, _db.driftRouteTasks);
+  $$DriftSyncQueueTableTableManager get driftSyncQueue =>
+      $$DriftSyncQueueTableTableManager(_db, _db.driftSyncQueue);
 }
