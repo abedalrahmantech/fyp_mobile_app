@@ -1,4 +1,4 @@
-package com.SynergyLabs.vendordash
+package com.ordervista.dispatch
 
 import io.flutter.embedding.android.FlutterActivity
 
