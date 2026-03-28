@@ -129,6 +129,59 @@ class TaskService {
     }
   }
 
+  Future<void> updateTaskStatus(String taskId, String newStatus) async {
+    _assertConfiguration();
+    final correlationId = AppLogger.newCorrelationId();
+    AppLogger.event(
+      'tasks.updateStatus.start',
+      correlationId: correlationId,
+      data: {'taskId': taskId, 'status': newStatus},
+    );
+    try {
+      final response = await _client
+          .from('tasks')
+          .update({
+            'status': newStatus,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('company_id', _companyId)
+          .eq('driver_id', _driverId)
+          .eq('id', taskId)
+          .select('id')
+          .maybeSingle();
+
+      if (response == null) {
+        throw TaskApiException('Task $taskId was not found for this driver.');
+      }
+      AppLogger.event(
+        'tasks.updateStatus.success',
+        correlationId: correlationId,
+        data: {'taskId': taskId, 'status': newStatus},
+      );
+    } on PostgrestException catch (error) {
+      AppLogger.event(
+        'tasks.updateStatus.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'message': error.message, 'code': error.code},
+      );
+      throw TaskApiException(
+        error.message.isNotEmpty
+            ? error.message
+            : 'Supabase error (${error.code}).',
+      );
+    } catch (error) {
+      if (error is TaskApiException) rethrow;
+      AppLogger.event(
+        'tasks.updateStatus.error',
+        level: 'error',
+        correlationId: correlationId,
+        data: {'error': error.toString()},
+      );
+      throw TaskApiException('Unexpected Supabase error: $error');
+    }
+  }
+
   Future<void> saveProofOfDelivery(
     String taskId, {
     String? proofCode,

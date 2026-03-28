@@ -53,6 +53,11 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
 
   // Chat state
   bool _chatLoading = false;
+
+  // Fleet optimisation state
+  bool _fleetLoading = false;
+  String? _fleetMessage;
+  List<Map<String, dynamic>> _fleetAssignments = const [];
   String? _chatMessage;
   List<_ChatMessage> _chatMessages = const [];
   final _chatInputController = TextEditingController();
@@ -125,9 +130,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         }
       }
       // Fallback to first membership if no admin/dispatcher found
-      selectedMembership ??= memberships.isNotEmpty 
-          ? memberships.first as Map<String, dynamic> 
-          : null;
+      selectedMembership ??= memberships.isNotEmpty ? memberships.first : null;
 
       _role = selectedMembership?['role']?.toString();
       // Allow both 'admin' and 'dispatcher' roles to access admin portal
@@ -245,6 +248,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         final topDriver = recommendations.first as Map<String, dynamic>;
         final driverId = topDriver['member_id']?.toString() ?? '';
         final distanceKm = topDriver['distance_km']?.toString() ?? 'unknown';
+        final completionPct =
+            ((topDriver['completion_rate'] as num?)?.toDouble() ?? 0) * 100;
+        final avgMinutes =
+            (topDriver['avg_delivery_minutes'] as num?)?.toDouble() ?? 0;
 
         _driverController.text = driverId;
 
@@ -257,10 +264,13 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Recommended: ${topDriver['email'] ?? 'Driver'} (${distanceKm}km away, ${topDriver['task_count']} active tasks)',
+                'Recommended: ${topDriver['email'] ?? 'Driver'} '
+                '(${distanceKm}km away, ${topDriver['task_count']} active tasks, '
+                '${completionPct.toStringAsFixed(0)}% completion, '
+                '${avgMinutes.toStringAsFixed(0)}min avg)',
               ),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 4),
+              duration: const Duration(seconds: 6),
             ),
           );
         }
@@ -377,13 +387,17 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                         'No company membership found for ${user?.email ?? 'user'}. Please contact your administrator.',
                     color: Colors.orange.shade100,
                   ),
-                if (session != null && _role != null && _role != 'admin' && _role != 'dispatcher')
+                if (session != null &&
+                    _role != null &&
+                    _role != 'admin' &&
+                    _role != 'dispatcher')
                   _InlineMessage(
                     message:
                         'Signed in as ${user?.email}. Role=$_role. Admin or dispatcher access required.',
                     color: Colors.red.shade100,
                   ),
-                if (session != null && (_role == 'admin' || _role == 'dispatcher')) ...[
+                if (session != null &&
+                    (_role == 'admin' || _role == 'dispatcher')) ...[
                   _buildDriverManagement(),
                   const SizedBox(height: 24),
                   _buildAdminDriverChat(),
@@ -397,6 +411,8 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                   _buildCsvImport(),
                   const SizedBox(height: 24),
                   _buildRouteSequencer(),
+                  const SizedBox(height: 24),
+                  _buildFleetOptimiser(),
                   const SizedBox(height: 24),
                   _buildRouteOverview(),
                   const SizedBox(height: 24),
@@ -486,7 +502,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _status,
+              initialValue: _status,
               items: _statusOptions
                   .map((status) => DropdownMenuItem(
                         value: status,
@@ -841,6 +857,230 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildFleetOptimiser() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Fleet-Wide Distance Optimiser',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Assigns every unassigned pending task to the nearest available driver, '
+              'minimising total fleet travel distance.',
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _fleetLoading ? null : _runFleetOptimisation,
+              icon: _fleetLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.hub),
+              label: const Text('Optimise Fleet Assignments'),
+            ),
+            if (_fleetMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(_fleetMessage!, style: const TextStyle(color: Colors.green)),
+            ],
+            if (_fleetAssignments.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('Suggested Assignments:',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              ..._fleetAssignments.map(
+                (a) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(a['address'] ?? 'Unknown'),
+                  subtitle: Text(
+                    'Driver: ${a['driver_email'] ?? a['driver_id']} '
+                    '(${a['distance_km']}km)',
+                  ),
+                  trailing: ElevatedButton(
+                    onPressed: () => _applyFleetAssignment(a),
+                    child: const Text('Assign'),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runFleetOptimisation() async {
+    final config = context.read<AppConfig>();
+
+    setState(() {
+      _fleetLoading = true;
+      _fleetMessage = null;
+      _fleetAssignments = const [];
+    });
+
+    try {
+      // 1. Fetch unassigned pending tasks
+      final taskRows = await _client
+          .from('tasks')
+          .select('id, address')
+          .eq('company_id', config.companyId)
+          .eq('status', 'pending')
+          .isFilter('driver_id', null);
+
+      if ((taskRows as List).isEmpty) {
+        setState(() {
+          _fleetMessage = 'No unassigned pending tasks to optimise.';
+          _fleetLoading = false;
+        });
+        return;
+      }
+
+      // 2. Fetch available drivers with locations
+      final driverRows = await _client
+          .from('company_members')
+          .select('id, email, last_known_location')
+          .eq('company_id', config.companyId)
+          .eq('role', 'driver')
+          .eq('is_available', true);
+
+      if ((driverRows as List).isEmpty) {
+        setState(() {
+          _fleetMessage = 'No available drivers found.';
+          _fleetLoading = false;
+        });
+        return;
+      }
+
+      // 3. Geocode task addresses
+      final mapbox = MapboxService(
+        config.mapboxAccessToken,
+        countryCode: config.mapboxCountryCode,
+        proximity: GeoPoint(
+          lat: config.mapboxProximityLat,
+          lng: config.mapboxProximityLng,
+        ),
+      );
+
+      final tasks = <Map<String, dynamic>>[];
+      for (final t in taskRows) {
+        final addr = t['address']?.toString() ?? '';
+        if (addr.isEmpty) continue;
+        final geo = await mapbox.forwardGeocode(addr);
+        if (geo != null) {
+          tasks.add({...t as Map<String, dynamic>, '_geo': geo});
+        }
+      }
+
+      // 4. Parse driver locations
+      final drivers = <Map<String, dynamic>>[];
+      for (final d in driverRows) {
+        final loc = d['last_known_location'];
+        if (loc == null) continue;
+        // PostGIS geography stored as GeoJSON or WKT — parse point coords
+        GeoPoint? dGeo;
+        if (loc is Map) {
+          final coords = (loc['coordinates'] as List?)?.cast<num>();
+          if (coords != null && coords.length >= 2) {
+            dGeo = GeoPoint(
+              lat: coords[1].toDouble(),
+              lng: coords[0].toDouble(),
+            );
+          }
+        }
+        if (dGeo != null) {
+          drivers.add({...d as Map<String, dynamic>, '_geo': dGeo});
+        }
+      }
+
+      if (drivers.isEmpty) {
+        setState(() {
+          _fleetMessage =
+              'No drivers with known locations. Drivers must share GPS first.';
+          _fleetLoading = false;
+        });
+        return;
+      }
+
+      // 5. Greedy nearest-driver assignment
+      final assignments = <Map<String, dynamic>>[];
+      final remainingTasks = List<Map<String, dynamic>>.from(tasks);
+
+      for (final task in remainingTasks) {
+        final taskGeo = task['_geo'] as GeoPoint;
+        Map<String, dynamic>? bestDriver;
+        double bestDist = double.infinity;
+
+        for (final drv in drivers) {
+          final drvGeo = drv['_geo'] as GeoPoint;
+          final dist = taskGeo.distanceTo(drvGeo);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestDriver = drv;
+          }
+        }
+
+        if (bestDriver != null) {
+          assignments.add({
+            'task_id': task['id'],
+            'address': task['address'],
+            'driver_id': bestDriver['id'],
+            'driver_email': bestDriver['email'],
+            'distance_km': bestDist.toStringAsFixed(2),
+          });
+        }
+      }
+
+      setState(() {
+        _fleetAssignments = assignments;
+        _fleetMessage =
+            '${assignments.length} assignments optimised across ${drivers.length} drivers.';
+      });
+    } catch (e) {
+      setState(() => _fleetMessage = 'Fleet optimisation failed: $e');
+    } finally {
+      setState(() => _fleetLoading = false);
+    }
+  }
+
+  Future<void> _applyFleetAssignment(Map<String, dynamic> assignment) async {
+    try {
+      await _client.from('tasks').update({
+        'driver_id': assignment['driver_id'],
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', assignment['task_id']);
+
+      setState(() {
+        _fleetAssignments = _fleetAssignments
+            .where((a) => a['task_id'] != assignment['task_id'])
+            .toList();
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Assigned ${assignment['address']} to ${assignment['driver_email']}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Assignment failed: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildRouteOverview() {

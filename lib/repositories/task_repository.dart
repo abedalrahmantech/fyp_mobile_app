@@ -86,6 +86,19 @@ class TaskRepository {
     }
   }
 
+  Future<void> updateTaskStatus(String taskId, String newStatus) async {
+    await taskService.updateTaskStatus(taskId, newStatus);
+    // Update local cache if available
+    if (database != null) {
+      await (database!.update(database!.driftTasks)
+            ..where((t) => t.id.equals(taskId)))
+          .write(DriftTasksCompanion(
+        status: Value(newStatus),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ));
+    }
+  }
+
   List<DeliveryTask> demoTasks() => taskService.demoTasks();
 
   DriftTasksCompanion _mapDeliveryTaskToCompanion(DeliveryTask task) {

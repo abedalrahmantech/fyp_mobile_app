@@ -13,6 +13,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../app/app_theme.dart';
 import '../../config/app_config.dart';
+import '../../models/ai_action.dart';
 import '../../models/driver_profile.dart';
 import '../../models/delivery_task.dart';
 import '../../services/ai_service.dart';
@@ -41,10 +42,14 @@ class _TaskListScreenState extends State<TaskListScreen> {
   List<_AdminMessage> _adminMessages = const [];
   int _unreadMessageCount = 0;
 
-  // Agentic AI notification state
-  String? _aiSuggestion;
+  // Agentic AI state
+  AiAction? _currentAiAction;
   bool _aiSuggestionLoading = false;
   DateTime? _lastAiSuggestionTime;
+  bool _aiActionExecuting = false;
+
+  // Route re-sequencing state
+  bool _resequencing = false;
 
   @override
   void initState() {
@@ -261,45 +266,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
         model: config.openRouterModel,
       );
 
-      // Build context for AI
-      final pendingCount = tasks.where((t) => t.status == 'pending').length;
-      final inTransitCount =
-          tasks.where((t) => t.status == 'in-transit').length;
-      final deliveredCount = tasks.where((t) => t.status == 'delivered').length;
-      final now = DateTime.now();
-      final hour = now.hour;
-
-      String timeContext;
-      if (hour < 9) {
-        timeContext = 'early morning';
-      } else if (hour < 12) {
-        timeContext = 'morning';
-      } else if (hour < 17) {
-        timeContext = 'afternoon';
-      } else {
-        timeContext = 'evening';
-      }
-
-      final prompt =
-          '''You are a helpful delivery route assistant. Based on the current status, provide ONE short, actionable suggestion (max 50 words) to help the driver be more efficient.
-
-Current status:
-- Time: $timeContext
-- Pending deliveries: $pendingCount
-- In-transit: $inTransitCount
-- Completed today: $deliveredCount
-- Driver availability: ${_isAvailable ? 'Available' : 'Offline'}
-
-Respond with just the suggestion, no formatting or preamble.''';
-
-      final response = await service.chat([
-        {'role': 'user', 'content': prompt}
-      ]);
+      final action = await service.getAgenticSuggestion(
+        tasks: tasks,
+        isAvailable: _isAvailable,
+        pendingSyncCount: viewModel.pendingSyncCount,
+      );
       service.dispose();
 
-      if (mounted && response != null && !response.contains('failed')) {
+      if (mounted) {
         setState(() {
-          _aiSuggestion = response.trim();
+          _currentAiAction = action;
           _lastAiSuggestionTime = DateTime.now();
         });
       }
@@ -312,8 +288,139 @@ Respond with just the suggestion, no formatting or preamble.''';
     }
   }
 
+  /// Executes the action recommended by the AI agent.
+  Future<void> _executeAiAction(AiAction action) async {
+    if (_aiActionExecuting) return;
+    setState(() => _aiActionExecuting = true);
+
+    try {
+      final viewModel = context.read<TaskViewModel>();
+      String feedback;
+
+      switch (action.actionType) {
+        case AiActionType.startNextPending:
+          final pending =
+              viewModel.tasks.where((t) => t.status == 'pending').toList();
+          if (pending.isEmpty) {
+            feedback = 'No pending tasks to start.';
+            break;
+          }
+          final target = pending.first;
+          await viewModel.updateTaskStatus(target.id, 'in-transit');
+          feedback = 'Started delivery for ${target.address}.';
+
+        case AiActionType.markDelivered:
+          final taskId = action.taskId;
+          if (taskId == null) {
+            feedback = 'No task specified for delivery completion.';
+            break;
+          }
+          final task = viewModel.tasks.where((t) => t.id == taskId).firstOrNull;
+          if (task == null) {
+            feedback = 'Task $taskId not found.';
+            break;
+          }
+          await viewModel.markAsDelivered(task);
+          feedback = 'Marked ${task.address} as delivered.';
+
+        case AiActionType.goAvailable:
+          if (!_isAvailable) await _toggleAvailability();
+          feedback = 'You are now available for deliveries.';
+
+        case AiActionType.goOffline:
+          if (_isAvailable) await _toggleAvailability();
+          feedback = 'You are now offline.';
+
+        case AiActionType.syncPending:
+          await viewModel.syncPendingDeliveries();
+          feedback = 'Synced ${viewModel.pendingSyncCount} pending updates.';
+
+        case AiActionType.refreshTasks:
+          await viewModel.loadTasks(forceRefresh: true);
+          feedback = 'Task list refreshed.';
+
+        case AiActionType.none:
+          feedback = 'No action to execute.';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text('AI Agent: $feedback')),
+              ],
+            ),
+            backgroundColor: Colors.deepPurple,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        // Clear the suggestion after execution
+        setState(() {
+          _currentAiAction = null;
+          _lastAiSuggestionTime = null; // Allow refresh sooner
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI action failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _aiActionExecuting = false);
+      }
+    }
+  }
+
   void _dismissAiSuggestion() {
-    setState(() => _aiSuggestion = null);
+    setState(() => _currentAiAction = null);
+  }
+
+  Future<void> _resequenceRoute() async {
+    final viewModel = context.read<TaskViewModel>();
+    final config = context.read<AppConfig>();
+
+    if (config.mapboxAccessToken.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mapbox access token not configured.')),
+      );
+      return;
+    }
+
+    setState(() => _resequencing = true);
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final origin = GeoPoint(lat: pos.latitude, lng: pos.longitude);
+      final mapbox = MapboxService(config.mapboxAccessToken);
+
+      await viewModel.resequenceFromLocation(origin, mapbox);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Route re-sequenced from your location.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Re-sequence failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _resequencing = false);
+    }
+  }
+
+  void _clearRouteOverride() {
+    context.read<TaskViewModel>().clearRouteOverride();
   }
 
   @override
@@ -340,7 +447,7 @@ Respond with just the suggestion, no formatting or preamble.''';
               : Switch(
                   value: _isAvailable,
                   onChanged: (_) => _toggleAvailability(),
-                  activeColor: Colors.green,
+                  activeThumbColor: Colors.green,
                   inactiveThumbColor: Colors.grey,
                 ),
         ),
@@ -414,18 +521,30 @@ Respond with just the suggestion, no formatting or preamble.''';
           const _LastSyncedIndicator(),
         ],
       ),
-      body: Column(
-        children: [
-          // AI Proactive Suggestion Card
-          if (_aiSuggestion != null)
-            _AiSuggestionCard(
-              suggestion: _aiSuggestion!,
-              onDismiss: _dismissAiSuggestion,
-              onRefresh: _loadAiSuggestion,
+      body: Consumer<TaskViewModel>(
+        builder: (context, vm, _) => Column(
+          children: [
+            // AI Proactive Suggestion Card
+            if (_currentAiAction != null)
+              _AiSuggestionCard(
+                action: _currentAiAction!,
+                onDismiss: _dismissAiSuggestion,
+                onRefresh: _loadAiSuggestion,
+                onExecute: () => _executeAiAction(_currentAiAction!),
+                executing: _aiActionExecuting,
+              ),
+            if (_aiSuggestionLoading) const LinearProgressIndicator(),
+            // Route re-sequence bar
+            _RouteResequenceBar(
+              hasOverride: vm.hasRouteOverride,
+              lastTime: vm.lastResequenceTime,
+              loading: _resequencing,
+              onResequence: _resequenceRoute,
+              onClear: _clearRouteOverride,
             ),
-          if (_aiSuggestionLoading) const LinearProgressIndicator(),
-          const Expanded(child: _TaskListBody()),
-        ],
+            const Expanded(child: _TaskListBody()),
+          ],
+        ),
       ),
     );
   }
@@ -739,6 +858,8 @@ class _TaskCard extends StatelessWidget {
     final config = context.read<AppConfig>();
     final statusColor = AppTheme.statusColor(task.status);
     final theme = Theme.of(context);
+    final now = DateTime.now();
+    final urgency = TaskViewModel.urgencyLabel(task, now);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -758,6 +879,10 @@ class _TaskCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (urgency != null) ...[
+                  _UrgencyBadge(label: urgency),
+                  const SizedBox(width: 6),
+                ],
                 Chip(
                   label: Text(task.status.toUpperCase()),
                   backgroundColor: statusColor.withValues(alpha: 0.15),
@@ -1547,14 +1672,18 @@ class _EngineerCredit extends StatelessWidget {
 
 class _AiSuggestionCard extends StatelessWidget {
   const _AiSuggestionCard({
-    required this.suggestion,
+    required this.action,
     required this.onDismiss,
     required this.onRefresh,
+    required this.onExecute,
+    this.executing = false,
   });
 
-  final String suggestion;
+  final AiAction action;
   final VoidCallback onDismiss;
   final VoidCallback onRefresh;
+  final VoidCallback onExecute;
+  final bool executing;
 
   @override
   Widget build(BuildContext context) {
@@ -1573,64 +1702,212 @@ class _AiSuggestionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.deepPurple.shade200),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.deepPurple.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.deepPurple,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'AI Suggestion',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.deepPurple,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  suggestion,
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          Column(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                onTap: onDismiss,
-                borderRadius: BorderRadius.circular(12),
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 18, color: Colors.grey),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.deepPurple,
+                  size: 20,
                 ),
               ),
-              const SizedBox(height: 4),
-              InkWell(
-                onTap: onRefresh,
-                borderRadius: BorderRadius.circular(12),
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.refresh, size: 18, color: Colors.grey),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      action.isActionable
+                          ? 'AI Agent — Action Available'
+                          : 'AI Suggestion',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: action.isActionable
+                            ? Colors.deepPurple.shade700
+                            : Colors.deepPurple,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      action.suggestion,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
                 ),
+              ),
+              Column(
+                children: [
+                  InkWell(
+                    onTap: onDismiss,
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close, size: 18, color: Colors.grey),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  InkWell(
+                    onTap: onRefresh,
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.refresh, size: 18, color: Colors.grey),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          // Actionable button row
+          if (action.isActionable) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: executing ? null : onExecute,
+                icon: executing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.play_arrow_rounded, size: 20),
+                label: Text(
+                  executing ? 'Executing…' : action.actionLabel,
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _RouteResequenceBar extends StatelessWidget {
+  const _RouteResequenceBar({
+    required this.hasOverride,
+    required this.lastTime,
+    required this.loading,
+    required this.onResequence,
+    required this.onClear,
+  });
+
+  final bool hasOverride;
+  final DateTime? lastTime;
+  final bool loading;
+  final VoidCallback onResequence;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: hasOverride && lastTime != null
+                ? Text(
+                    'Route optimised ${DateFormat.Hm().format(lastTime!)}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.green.shade700),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          if (hasOverride)
+            TextButton.icon(
+              onPressed: onClear,
+              icon: const Icon(Icons.clear, size: 16),
+              label: const Text('Reset'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey.shade700,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+            ),
+          const SizedBox(width: 4),
+          ElevatedButton.icon(
+            onPressed: loading ? null : onResequence,
+            icon: loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.route, size: 18),
+            label: const Text('Re-sequence'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              textStyle: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UrgencyBadge extends StatelessWidget {
+  const _UrgencyBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color fg;
+    switch (label) {
+      case 'OVERDUE':
+        bg = Colors.red.shade100;
+        fg = Colors.red.shade800;
+      case 'IMMINENT':
+        bg = Colors.orange.shade100;
+        fg = Colors.orange.shade900;
+      case 'APPROACHING':
+        bg = Colors.amber.shade100;
+        fg = Colors.amber.shade900;
+      default:
+        bg = Colors.blue.shade50;
+        fg = Colors.blue.shade700;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: fg,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

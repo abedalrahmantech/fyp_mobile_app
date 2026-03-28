@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
@@ -7,6 +8,22 @@ class GeoPoint {
 
   final double lat;
   final double lng;
+
+  /// Haversine distance in kilometres between two points.
+  double distanceTo(GeoPoint other) {
+    const earthRadius = 6371.0; // km
+    final dLat = _toRad(other.lat - lat);
+    final dLng = _toRad(other.lng - lng);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRad(lat)) *
+            math.cos(_toRad(other.lat)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadius * c;
+  }
+
+  static double _toRad(double deg) => deg * math.pi / 180;
 }
 
 class MapboxService {
@@ -100,6 +117,37 @@ class MapboxService {
     final marker = 'pin-s-l+285A98(${point.lng},${point.lat})';
     final center = '${point.lng},${point.lat},14';
     return 'https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/$marker/$center/600x320@2x?access_token=$accessToken';
+  }
+
+  /// Nearest-neighbour route optimisation.
+  /// Given the driver's current position and a map of taskId → GeoPoint,
+  /// returns the task IDs in optimal visit order.
+  static List<String> nearestNeighbourSequence(
+    GeoPoint origin,
+    Map<String, GeoPoint> taskPoints,
+  ) {
+    if (taskPoints.isEmpty) return [];
+
+    final remaining = Map<String, GeoPoint>.from(taskPoints);
+    final sequence = <String>[];
+    var current = origin;
+
+    while (remaining.isNotEmpty) {
+      String? nearestId;
+      double nearestDist = double.infinity;
+      for (final entry in remaining.entries) {
+        final d = current.distanceTo(entry.value);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestId = entry.key;
+        }
+      }
+      if (nearestId == null) break;
+      sequence.add(nearestId);
+      current = remaining.remove(nearestId)!;
+    }
+
+    return sequence;
   }
 
   void dispose() {
