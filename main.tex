@@ -1,0 +1,172 @@
+% ============================================================
+% OrderVista: AI-Enhanced Logistics Dispatch Platform
+% CS4514 Final Year Project — Final Report
+% Abed Al RAHMAN, 57744270
+% Supervisor: Prof HANCKE, Gerhard Petrus
+% Department of Computer Science, City University of Hong Kong
+% ============================================================
+
+\documentclass[12pt,a4paper,twoside]{report}
+
+% ── Encoding & Fonts ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}            % Times-like font (professional)
+
+% ── Page Geometry ──
+\usepackage[
+  top=25mm, bottom=25mm, left=30mm, right=25mm,
+  headheight=15pt
+]{geometry}
+
+% ── Spacing ──
+\usepackage{setspace}
+\onehalfspacing                   % 1.5 line spacing per guidelines
+
+% ── Language ──
+\usepackage[english]{babel}
+\usepackage{csquotes}             % recommended by biblatex when babel is loaded
+
+% ── Graphics & Figures ──
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\graphicspath{{report/figures/}}
+
+% ── Tables ──
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{array}
+
+% ── Colours & Links ──
+\usepackage[dvipsnames]{xcolor}
+\usepackage[
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=NavyBlue,
+  urlcolor=NavyBlue,
+  bookmarks=true
+]{hyperref}
+
+% ── Code Listings ──
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!70!black},
+  tabsize=2,
+  captionpos=b
+}
+
+% ── Maths (if needed) ──
+\usepackage{amsmath}
+\usepackage{amssymb}              % for \checkmark
+
+% ── Diagrams (TikZ) ──
+\usepackage{tikz}
+\usetikzlibrary{
+  shapes.geometric,               % diamond, ellipse, trapezium …
+  shapes.multipart,               % split rectangles (class boxes)
+  arrows.meta,                    % stealth, Latex arrow tips
+  positioning,                    % right=of, below=of …
+  fit,                            % background rectangles
+  calc,                           % coordinate arithmetic
+  backgrounds,                    % on background layer
+  decorations.pathreplacing,      % braces
+  chains                          % simplified sequential placement
+}
+
+% ── Algorithm pseudo-code ──
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\SetAlgoNlRelativeSize{-1}        % slightly smaller line numbers
+
+% ── Bibliography ──
+\usepackage[
+  backend=biber,
+  style=authoryear,
+  sorting=nyt,
+  maxbibnames=99,
+  maxcitenames=2,
+  dashed=false
+]{biblatex}
+\addbibresource{report/references.bib}
+
+% ── Captions ──
+\usepackage[font=small, labelfont=bf]{caption}
+
+% ── Headers & Footers ──
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[RE]{\nouppercase{\leftmark}}
+\fancyhead[LO]{\nouppercase{\rightmark}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Chapter Style ──
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{30pt}
+
+% ── Misc ──
+\usepackage{enumitem}
+\usepackage{parskip}              % paragraph spacing instead of indent
+
+% ============================================================
+\begin{document}
+
+% ── Front Matter (roman numerals) ──
+% NOTE: Insert your cover page and declaration page before this line when ready.
+\pagenumbering{roman}
+
+% ── Extended Abstract (placeholder — written last) ──
+\input{report/chapters/abstract}
+
+% ── Acknowledgements ──
+\input{report/chapters/acknowledgements}
+
+% ── Table of Contents ──
+\tableofcontents
+\newpage
+
+% ── List of Figures ──
+\listoffigures
+\newpage
+
+% ── List of Tables ──
+\listoftables
+\newpage
+
+% ── Main Body (arabic numerals) ──
+\pagenumbering{arabic}
+
+\input{report/chapters/ch1_introduction}
+\input{report/chapters/ch2_literature_review}
+\input{report/chapters/ch3_system_design}
+\input{report/chapters/ch4_implementation}
+\input{report/chapters/ch5_testing}
+\input{report/chapters/ch6_discussion}
+\input{report/chapters/ch7_conclusion}
+
+% ── References ──
+\printbibliography[heading=bibintoc, title={References}]
+
+% ── Appendices ──
+\appendix
+\input{report/chapters/appendix_a}
+\input{report/chapters/appendix_b}
+\input{report/chapters/appendix_c}
+\input{report/chapters/appendix_d}
+\input{report/chapters/appendix_e}
+\input{report/chapters/appendix_f}
+
+\end{document}

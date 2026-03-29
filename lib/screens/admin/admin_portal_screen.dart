@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -25,6 +25,9 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   final _driverController = TextEditingController();
   final _routeDriverController = TextEditingController();
   final _statusOptions = const ['pending', 'in-transit', 'delivered'];
+
+  // Navigation state — sidebar section index
+  int _navIndex = 0;
 
   DateTime? _scheduledAt;
   String _status = 'pending';
@@ -206,7 +209,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     });
 
     try {
-      // First, geocode the address to get coordinates
+      // Geocode the task address
       final mapboxService = MapboxService(
         config.mapboxAccessToken,
         countryCode: config.mapboxCountryCode,
@@ -217,6 +220,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
       );
 
       final addressCoords = await mapboxService.forwardGeocode(address);
+      mapboxService.dispose();
 
       if (addressCoords == null) {
         setState(() {
@@ -226,53 +230,237 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         return;
       }
 
-      // Call the recommend_driver_for_tasks RPC
-      final response = await _client.rpc(
-        'recommend_driver_for_tasks',
-        params: {
-          'p_company_id': config.companyId,
-          'p_task_lat': addressCoords.lat,
-          'p_task_lng': addressCoords.lng,
-        },
-      );
+      // Fetch drivers directly (simple query, no email column)
+      final driverRows = await _client
+          .from('company_members')
+          .select(
+              'id, user_id, is_available, current_task_count, last_location_at')
+          .eq('company_id', config.companyId)
+          .eq('role', 'driver');
 
-      final recommendations = response as List<dynamic>?;
-
-      if (recommendations == null || recommendations.isEmpty) {
+      if ((driverRows as List).isEmpty) {
         setState(() {
-          _error =
-              'No available drivers found. Make sure drivers have set their availability.';
+          _error = 'No drivers found in your company.';
         });
-      } else {
-        // Get the top recommended driver
-        final topDriver = recommendations.first as Map<String, dynamic>;
-        final driverId = topDriver['member_id']?.toString() ?? '';
-        final distanceKm = topDriver['distance_km']?.toString() ?? 'unknown';
-        final completionPct =
-            ((topDriver['completion_rate'] as num?)?.toDouble() ?? 0) * 100;
-        final avgMinutes =
-            (topDriver['avg_delivery_minutes'] as num?)?.toDouble() ?? 0;
+        return;
+      }
 
-        _driverController.text = driverId;
+      // Resolve emails via profiles table
+      final userIds = (driverRows as List)
+          .map((r) => r['user_id']?.toString())
+          .whereType<String>()
+          .toList();
+      final emailMap = <String, String>{};
+      if (userIds.isNotEmpty) {
+        try {
+          final profiles = await _client
+              .from('profiles')
+              .select('id, email')
+              .inFilter('id', userIds);
+          for (final p in (profiles as List)) {
+            final uid = p['id']?.toString();
+            final em = p['email']?.toString();
+            if (uid != null && em != null) emailMap[uid] = em;
+          }
+        } catch (_) {}
+      }
 
-        // Show recommendation details
+      // Fetch performance stats per driver from tasks table
+      final perfRows = await _client
+          .from('tasks')
+          .select('driver_id, status, scheduled_start, updated_at')
+          .eq('company_id', config.companyId);
+
+      final perfMap = <String, Map<String, dynamic>>{};
+      for (final t in (perfRows as List)) {
+        final did = t['driver_id']?.toString();
+        if (did == null) continue;
+        perfMap.putIfAbsent(
+            did, () => {'total': 0, 'delivered': 0, 'minutes': <double>[]});
+        perfMap[did]!['total'] = (perfMap[did]!['total'] as int) + 1;
+        if (t['status'] == 'delivered') {
+          perfMap[did]!['delivered'] = (perfMap[did]!['delivered'] as int) + 1;
+          final start =
+              DateTime.tryParse(t['scheduled_start']?.toString() ?? '');
+          final updated = DateTime.tryParse(t['updated_at']?.toString() ?? '');
+          if (start != null && updated != null) {
+            (perfMap[did]!['minutes'] as List<double>)
+                .add(updated.difference(start).inMinutes.toDouble());
+          }
+        }
+      }
+
+      // Score each driver using the fetched rows
+      final ranked = <Map<String, dynamic>>[];
+      for (final row in driverRows) {
+        final memberId = row['id']?.toString() ?? '';
+        final userId = row['user_id']?.toString() ?? '';
+        final email = emailMap[userId] ?? 'Driver ${_shortId(memberId)}';
+        final isAvail = row['is_available'] == true;
+        final taskCount = (row['current_task_count'] as num?)?.toInt() ?? 0;
+
+        // No location columns in this simple query — distance stays 9999
+        final double distKm = 9999;
+
+        final perf = perfMap[memberId];
+        final total = (perf?['total'] as int?) ?? 0;
+        final delivered = (perf?['delivered'] as int?) ?? 0;
+        final compRate = total > 0 ? delivered / total : 0.0;
+        final mins = (perf?['minutes'] as List<double>?) ?? [];
+        final avgMin =
+            mins.isEmpty ? 0.0 : mins.reduce((a, b) => a + b) / mins.length;
+
+        // Composite score (higher is better)
+        final score = (isAvail ? 1.0 : 0.5) *
+            (1.0 / (1.0 + distKm)) *
+            (1.0 / (1.0 + taskCount)) *
+            (0.5 + 0.5 * compRate);
+
+        ranked.add({
+          'member_id': memberId,
+          'email': email,
+          'is_available': isAvail,
+          'task_count': taskCount,
+          'distance_km': distKm.toStringAsFixed(2),
+          'completion_rate': compRate,
+          'avg_delivery_minutes': avgMin,
+          'score': score,
+        });
+      }
+
+      ranked.sort(
+          (a, b) => (b['score'] as double).compareTo(a['score'] as double));
+
+      if (ranked.isEmpty) {
         setState(() {
-          _error = null;
+          _error = 'No drivers found.';
         });
+        return;
+      }
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Recommended: ${topDriver['email'] ?? 'Driver'} '
-                '(${distanceKm}km away, ${topDriver['task_count']} active tasks, '
-                '${completionPct.toStringAsFixed(0)}% completion, '
-                '${avgMinutes.toStringAsFixed(0)}min avg)',
+      setState(() => _error = null);
+
+      if (mounted) {
+        final selected = await showDialog<String>(
+          context: context,
+          builder: (ctx) {
+            return AlertDialog(
+              title: const Text('Driver Recommendations'),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ranked by proximity to: $address',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...List.generate(ranked.length, (i) {
+                        final d = ranked[i];
+                        final mId = d['member_id'] as String;
+                        final email = d['email'] as String;
+                        final distKm = d['distance_km'] as String;
+                        final tasks = d['task_count'] as int;
+                        final compPct = (d['completion_rate'] as double) * 100;
+                        final avgMin = d['avg_delivery_minutes'] as double;
+                        final isAvail = d['is_available'] as bool;
+                        final rawScore = (d['score'] as double) * 100;
+                        final scoreLabel =
+                            rawScore.clamp(0, 100).toStringAsFixed(0);
+
+                        final isTop = i == 0;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isTop
+                                  ? Colors.green.shade400
+                                  : Colors.grey.shade300,
+                              width: isTop ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            color: isTop ? Colors.green.shade50 : null,
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  isTop ? Colors.green : Colors.blueGrey,
+                              child: Text(
+                                '#${i + 1}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    email,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepPurple,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'Score $scoreLabel',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '${distKm}km away  ·  $tasks active  ·  '
+                                '${compPct.toStringAsFixed(0)}% completion  ·  '
+                                '${avgMin.toStringAsFixed(0)}min avg'
+                                '${isAvail ? '' : '  ·  OFFLINE'}',
+                              ),
+                            ),
+                            onTap: () => Navigator.of(ctx).pop(mId),
+                            trailing: isTop
+                                ? const Icon(Icons.star, color: Colors.amber)
+                                : null,
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
               ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 6),
-            ),
-          );
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+
+        if (selected != null && selected.isNotEmpty) {
+          _driverController.text = selected;
         }
       }
     } catch (e) {
@@ -348,109 +536,483 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     return result.toString();
   }
 
+  // ─── Navigation descriptors ───────────────────────────────────────
+  static const _navItems = <({IconData icon, String label})>[
+    (icon: Icons.dashboard_outlined, label: 'Dashboard'),
+    (icon: Icons.add_task, label: 'Tasks'),
+    (icon: Icons.alt_route, label: 'Routes'),
+    (icon: Icons.groups_outlined, label: 'Fleet'),
+    (icon: Icons.chat_outlined, label: 'Chat'),
+    (icon: Icons.local_shipping_outlined, label: 'Tracking'),
+    (icon: Icons.verified_outlined, label: 'PoD'),
+  ];
+
+  Widget _sectionBody() {
+    switch (_navIndex) {
+      case 0:
+        return _buildDashboardSection();
+      case 1:
+        return _buildTasksSection();
+      case 2:
+        return _buildRoutesSection();
+      case 3:
+        return _buildFleetSection();
+      case 4:
+        return _buildChatSection();
+      case 5:
+        return _buildTrackingSection();
+      case 6:
+        return _buildPodSection();
+      default:
+        return _buildDashboardSection();
+    }
+  }
+
+  // ─── Dashboard (overview) ──────────────────────────────────────────
+  Widget _buildDashboardSection() {
+    final pending = _tasks.where((t) => t['status'] == 'pending').length;
+    final inTransit = _tasks.where((t) => t['status'] == 'in-transit').length;
+    final delivered = _tasks.where((t) => t['status'] == 'delivered').length;
+    final availDrivers = _drivers.where((d) => d.isAvailable).length;
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        // ── Summary cards row ──
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            _summaryCard(
+              icon: Icons.pending_actions,
+              label: 'Pending',
+              value: '$pending',
+              color: Colors.orange,
+            ),
+            _summaryCard(
+              icon: Icons.local_shipping,
+              label: 'In Transit',
+              value: '$inTransit',
+              color: Colors.blue,
+            ),
+            _summaryCard(
+              icon: Icons.check_circle_outline,
+              label: 'Delivered',
+              value: '$delivered',
+              color: const Color(0xFF2E7D32),
+            ),
+            _summaryCard(
+              icon: Icons.people_outline,
+              label: 'Drivers Online',
+              value: '$availDrivers / ${_drivers.length}',
+              color: const Color(0xFF004E7C),
+            ),
+            _summaryCard(
+              icon: Icons.route,
+              label: 'Active Routes',
+              value: '${_routes.length}',
+              color: Colors.deepPurple,
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+        _buildTaskList(),
+      ],
+    );
+  }
+
+  Widget _summaryCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return SizedBox(
+      width: 190,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: color.withAlpha(60)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: color.withAlpha(28),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.all(10),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Section wrappers ─────────────────────────────────────────────
+  Widget _buildTasksSection() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _buildTaskForm(),
+        const SizedBox(height: 20),
+        _buildCsvImport(),
+        const SizedBox(height: 20),
+        _buildTaskList(),
+      ],
+    );
+  }
+
+  Widget _buildRoutesSection() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _buildRouteSequencer(),
+        const SizedBox(height: 20),
+        _buildRouteOverview(),
+      ],
+    );
+  }
+
+  Widget _buildFleetSection() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _buildDriverManagement(),
+        const SizedBox(height: 20),
+        _buildFleetOptimiser(),
+      ],
+    );
+  }
+
+  Widget _buildChatSection() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _buildAdminDriverChat(),
+      ],
+    );
+  }
+
+  Widget _buildTrackingSection() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _buildCustomerTracking(),
+      ],
+    );
+  }
+
+  Widget _buildPodSection() {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _buildProofReview(),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = _client.auth.currentSession;
     final user = _client.auth.currentUser;
+    final isAdmin =
+        session != null && (_role == 'admin' || _role == 'dispatcher');
+
+    const brandPrimary = Color(0xFF004E7C);
+    const brandAccent = Color(0xFF1CB5E0);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        title: const Text('OrderVista Admin'),
+        backgroundColor: brandPrimary,
+        foregroundColor: Colors.white,
+        elevation: 1,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(36),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.local_shipping, size: 20),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'OrderVista',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: brandAccent.withAlpha(60),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'ADMIN',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
-          if (session != null)
+          if (session != null) ...[
             IconButton(
-              tooltip: 'Refresh',
+              tooltip: 'Refresh data',
               onPressed: _loading ? null : _loadRoleAndTasks,
               icon: const Icon(Icons.refresh),
             ),
-          if (session != null)
-            TextButton(
+            const SizedBox(width: 4),
+            TextButton.icon(
               onPressed: _signOut,
-              child: const Text('Sign out'),
+              icon: const Icon(Icons.logout, size: 18, color: Colors.white70),
+              label: const Text(
+                'Sign out',
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
+            const SizedBox(width: 8),
+          ],
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
+          : _buildBody(session, user, isAdmin, brandPrimary, brandAccent),
+    );
+  }
+
+  Widget _buildBody(
+    dynamic session,
+    dynamic user,
+    bool isAdmin,
+    Color brandPrimary,
+    Color brandAccent,
+  ) {
+    // Not logged in
+    if (session == null) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: _buildSignInCard(),
+        ),
+      );
+    }
+
+    // Logged in but wrong role
+    if (!isAdmin) {
+      return Center(
+        child: _InlineMessage(
+          message: _role == null
+              ? 'No company membership found for ${user?.email ?? 'user'}.'
+              : 'Signed in as ${user?.email}. Role=$_role. Admin access required.',
+          color: Colors.orange.shade100,
+        ),
+      );
+    }
+
+    // Authenticated admin → sidebar + content
+    return Row(
+      children: [
+        // ── NavigationRail (sidebar) ──
+        NavigationRail(
+          backgroundColor: Colors.white,
+          selectedIndex: _navIndex,
+          onDestinationSelected: (i) => setState(() => _navIndex = i),
+          labelType: NavigationRailLabelType.all,
+          indicatorColor: brandPrimary.withAlpha(30),
+          selectedIconTheme: IconThemeData(color: brandPrimary),
+          selectedLabelTextStyle: TextStyle(
+            color: brandPrimary,
+            fontWeight: FontWeight.w600,
+            fontSize: 11,
+          ),
+          unselectedIconTheme: IconThemeData(color: Colors.grey.shade500),
+          unselectedLabelTextStyle: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 11,
+          ),
+          leading: const SizedBox(height: 8),
+          destinations: [
+            for (final n in _navItems)
+              NavigationRailDestination(
+                icon: Icon(n.icon),
+                label: Text(n.label),
+              ),
+          ],
+        ),
+        const VerticalDivider(width: 1, thickness: 1),
+        // ── Main content area ──
+        Expanded(
+          child: Column(
+            children: [
+              if (_error != null)
+                _InlineMessage(
+                  message: _error!,
+                  color: Colors.orange.shade100,
+                ),
+              Expanded(child: _sectionBody()),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Reusable section card shell ─────────────────────────────────
+  Widget _sectionCard({
+    required IconData icon,
+    required String title,
+    String? trailing,
+    List<Widget>? actions,
+    required List<Widget> children,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                if (_error != null)
-                  _InlineMessage(
-                    message: _error!,
-                    color: Colors.orange.shade100,
+                Icon(icon, size: 20, color: const Color(0xFF004E7C)),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
                   ),
-                if (session == null) _buildSignInCard(),
-                if (session != null && _role == null)
-                  _InlineMessage(
-                    message:
-                        'No company membership found for ${user?.email ?? 'user'}. Please contact your administrator.',
-                    color: Colors.orange.shade100,
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF004E7C).withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      trailing!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF004E7C),
+                      ),
+                    ),
                   ),
-                if (session != null &&
-                    _role != null &&
-                    _role != 'admin' &&
-                    _role != 'dispatcher')
-                  _InlineMessage(
-                    message:
-                        'Signed in as ${user?.email}. Role=$_role. Admin or dispatcher access required.',
-                    color: Colors.red.shade100,
-                  ),
-                if (session != null &&
-                    (_role == 'admin' || _role == 'dispatcher')) ...[
-                  _buildDriverManagement(),
-                  const SizedBox(height: 24),
-                  _buildAdminDriverChat(),
-                  const SizedBox(height: 24),
-                  _buildCustomerTracking(),
-                  const SizedBox(height: 24),
-                  _buildTaskForm(),
-                  const SizedBox(height: 24),
-                  _buildTaskList(),
-                  const SizedBox(height: 24),
-                  _buildCsvImport(),
-                  const SizedBox(height: 24),
-                  _buildRouteSequencer(),
-                  const SizedBox(height: 24),
-                  _buildFleetOptimiser(),
-                  const SizedBox(height: 24),
-                  _buildRouteOverview(),
-                  const SizedBox(height: 24),
-                  _buildProofReview(),
                 ],
+                const Spacer(),
+                if (actions != null) ...actions!,
               ],
             ),
+            const Divider(height: 24),
+            ...children,
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildSignInCard() {
     return Card(
-      margin: const EdgeInsets.only(top: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Admin Sign In',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
+            const Icon(Icons.local_shipping,
+                size: 36, color: Color(0xFF004E7C)),
             const SizedBox(height: 12),
+            const Text(
+              'Welcome to OrderVista',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Sign in with your admin credentials',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 20),
             TextField(
               controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: InputDecoration(
+                labelText: 'Email',
+                prefixIcon: const Icon(Icons.mail_outline, size: 20),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextField(
               controller: _passwordController,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loading ? null : _signIn,
-              icon: const Icon(Icons.login),
-              label: const Text('Sign in'),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton.icon(
+                onPressed: _loading ? null : _signIn,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF004E7C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.login),
+                label: const Text('Sign in'),
+              ),
             ),
           ],
         ),
@@ -459,156 +1021,395 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   }
 
   Widget _buildTaskForm() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return _sectionCard(
+      icon: Icons.add_task,
+      title: 'Create Task',
+      children: [
+        TextField(
+          controller: _addressController,
+          decoration: InputDecoration(
+            labelText: 'Address',
+            hintText: '1 Harbourfront Horizon, Kowloon Bay',
+            prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Text(
-              'Create Task',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _addressController,
-              decoration: const InputDecoration(
-                labelText: 'Address',
-                hintText: '1 Harbourfront Horizon, Kowloon Bay',
+            Expanded(
+              child: TextField(
+                controller: _driverController,
+                decoration: InputDecoration(
+                  labelText: 'Driver ID (UUID) or email',
+                  prefixIcon: const Icon(Icons.person_outline, size: 20),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _driverController,
-                    decoration: const InputDecoration(
-                      labelText: 'Driver ID (UUID) or email',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: _recommendDriver,
-                  icon: const Icon(Icons.recommend, size: 18),
-                  label: const Text('Recommend'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.deepPurple,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _status,
-              items: _statusOptions
-                  .map((status) => DropdownMenuItem(
-                        value: status,
-                        child: Text(status.toUpperCase()),
-                      ))
-                  .toList(),
-              onChanged: (value) =>
-                  setState(() => _status = value ?? 'pending'),
-              decoration: const InputDecoration(labelText: 'Status'),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _scheduledAt == null
-                        ? 'Scheduled start not set'
-                        : 'Scheduled: ${DateFormat('MMM d • HH:mm').format(_scheduledAt!)}',
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () => _pickSchedule(context),
-                  icon: const Icon(Icons.calendar_today),
-                  label: const Text('Pick time'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loading ? null : _createTask,
-              icon: const Icon(Icons.add),
-              label: const Text('Create task'),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              onPressed: _recommendDriver,
+              icon: const Icon(Icons.recommend, size: 18),
+              label: const Text('Recommend'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.deepPurple,
+              ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTaskList() {
-    if (_tasks.isEmpty) {
-      return const Text('No tasks found.');
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Recent Tasks',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<String>(
+          initialValue: _status,
+          items: _statusOptions
+              .map((status) => DropdownMenuItem(
+                    value: status,
+                    child: Text(status.toUpperCase()),
+                  ))
+              .toList(),
+          onChanged: (value) => setState(() => _status = value ?? 'pending'),
+          decoration: InputDecoration(
+            labelText: 'Status',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         ),
-        const SizedBox(height: 8),
-        ..._tasks.map(
-          (task) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(task['address']?.toString() ?? 'Unknown address'),
-            subtitle: Text(
-              'Driver: ${task['driver_id'] ?? '-'} • Status: ${task['status'] ?? '-'}',
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _scheduledAt == null
+                    ? 'Scheduled start not set'
+                    : 'Scheduled: ${DateFormat('MMM d • HH:mm').format(_scheduledAt!)}',
+              ),
             ),
-            trailing: Text(
-              task['scheduled_start'] != null
-                  ? DateFormat('MMM d • HH:mm')
-                      .format(DateTime.parse(task['scheduled_start']).toLocal())
-                  : 'Unscheduled',
+            TextButton.icon(
+              onPressed: () => _pickSchedule(context),
+              icon: const Icon(Icons.calendar_today),
+              label: const Text('Pick time'),
             ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton.icon(
+            onPressed: _loading ? null : _createTask,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF004E7C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: const Icon(Icons.add),
+            label: const Text('Create task'),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCsvImport() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'CSV Import (Dispatcher)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Upload a CSV with columns: address, driver_id (optional), status (optional), scheduled_start (optional), lat, lng (optional).',
-            ),
-            const SizedBox(height: 12),
-            if (_csvMessage != null)
-              _InlineMessage(
-                message: _csvMessage!,
-                color: Colors.blue.shade50,
+  Widget _buildTaskList() {
+    if (_tasks.isEmpty) {
+      return _sectionCard(
+        icon: Icons.list_alt,
+        title: 'Recent Tasks',
+        trailing: '0',
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  Icon(Icons.inbox_outlined,
+                      size: 40, color: Colors.grey.shade300),
+                  const SizedBox(height: 8),
+                  Text('No tasks found.',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ],
               ),
-            ElevatedButton.icon(
-              onPressed: _csvLoading ? null : _pickCsvAndImport,
-              icon: _csvLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.upload_file),
-              label: const Text('Upload CSV'),
             ),
-          ],
+          ),
+        ],
+      );
+    }
+
+    return _sectionCard(
+      icon: Icons.list_alt,
+      title: 'Recent Tasks',
+      trailing: '${_tasks.length}',
+      children: [
+        ..._tasks.map(
+          (task) {
+            final status = task['status']?.toString() ?? 'pending';
+            final statusColor = status == 'delivered'
+                ? Colors.green
+                : status == 'in-transit'
+                    ? Colors.blue
+                    : Colors.orange;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade200),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                leading: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withAlpha(25),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    status.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  task['address']?.toString() ?? 'Unknown address',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Driver: ${_shortId(task['driver_id']?.toString() ?? '-')}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      task['scheduled_start'] != null
+                          ? DateFormat('MMM d • HH:mm').format(
+                              DateTime.parse(task['scheduled_start']).toLocal())
+                          : 'Unscheduled',
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      tooltip: 'Edit task',
+                      onPressed: () => _showEditTaskDialog(task),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete_outline,
+                          size: 18, color: Colors.red.shade400),
+                      tooltip: 'Delete task',
+                      onPressed: () => _showDeleteConfirmation(task),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
+      ],
+    );
+  }
+
+  Future<void> _showEditTaskDialog(Map<String, dynamic> task) async {
+    final editAddress = TextEditingController(text: task['address'] ?? '');
+    final editDriver = TextEditingController(text: task['driver_id'] ?? '');
+    String editStatus = task['status'] ?? 'pending';
+    DateTime? editScheduled = task['scheduled_start'] != null
+        ? DateTime.tryParse(task['scheduled_start'])?.toLocal()
+        : null;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit Task'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: editAddress,
+                      decoration: const InputDecoration(labelText: 'Address'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: editDriver,
+                      decoration: const InputDecoration(labelText: 'Driver ID'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: editStatus,
+                      items: _statusOptions
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(s.toUpperCase()),
+                              ))
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialogState(() => editStatus = v ?? editStatus),
+                      decoration: const InputDecoration(labelText: 'Status'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            editScheduled == null
+                                ? 'No schedule set'
+                                : 'Scheduled: ${DateFormat('MMM d • HH:mm').format(editScheduled!)}',
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final date = await showDatePicker(
+                              context: ctx,
+                              initialDate: editScheduled ?? DateTime.now(),
+                              firstDate: DateTime(2024),
+                              lastDate: DateTime(2030),
+                            );
+                            if (date == null) return;
+                            final time = await showTimePicker(
+                              context: ctx,
+                              initialTime: editScheduled != null
+                                  ? TimeOfDay.fromDateTime(editScheduled!)
+                                  : TimeOfDay.now(),
+                            );
+                            if (time == null) return;
+                            setDialogState(() {
+                              editScheduled = DateTime(
+                                date.year,
+                                date.month,
+                                date.day,
+                                time.hour,
+                                time.minute,
+                              );
+                            });
+                          },
+                          icon: const Icon(Icons.calendar_today, size: 16),
+                          label: const Text('Pick'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) return;
+
+    try {
+      await _client.from('tasks').update({
+        'address': editAddress.text.trim(),
+        'driver_id': editDriver.text.trim(),
+        'status': editStatus,
+        'scheduled_start': editScheduled?.toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', task['id']);
+      await _loadRoleAndTasks();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Failed to update task: $e');
+      }
+    }
+
+    editAddress.dispose();
+    editDriver.dispose();
+  }
+
+  Future<void> _showDeleteConfirmation(Map<String, dynamic> task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Task'),
+        content: Text(
+          'Are you sure you want to delete the task at "${task['address']}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _client.from('tasks').delete().eq('id', task['id']);
+      await _loadRoleAndTasks();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Failed to delete task: $e');
+      }
+    }
+  }
+
+  Widget _buildCsvImport() {
+    return _sectionCard(
+      icon: Icons.upload_file,
+      title: 'CSV Bulk Import',
+      children: [
+        Text(
+          'Upload a CSV file (address, driver_id, status, scheduled_start, lat, lng).',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 14),
+        if (_csvMessage != null)
+          _InlineMessage(
+            message: _csvMessage!,
+            color: Colors.blue.shade50,
+          ),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton.icon(
+            onPressed: _csvLoading ? null : _pickCsvAndImport,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF004E7C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: _csvLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.upload_file),
+            label: const Text('Upload CSV'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -814,107 +1615,150 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   }
 
   Widget _buildRouteSequencer() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Baseline Route Sequencer (Nearest-Next)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Generates a simple route order for pending tasks and persists it to routes + route_tasks.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _routeDriverController,
-              decoration: const InputDecoration(
-                labelText: 'Driver ID filter (optional)',
-                hintText: 'UUID to sequence only that driver’s tasks',
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_routeMessage != null)
-              _InlineMessage(
-                message: _routeMessage!,
-                color: Colors.blue.shade50,
-              ),
-            ElevatedButton.icon(
-              onPressed: _routeLoading ? null : _generateBaselineRoute,
-              icon: _routeLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.alt_route),
-              label: const Text('Generate baseline route'),
-            ),
-          ],
+    return _sectionCard(
+      icon: Icons.alt_route,
+      title: 'Baseline Route Sequencer',
+      children: [
+        Text(
+          'Generates a nearest-next route order for pending tasks and persists it to routes + route_tasks.',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
         ),
-      ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _routeDriverController,
+          decoration: InputDecoration(
+            labelText: 'Driver ID filter (optional)',
+            hintText: 'UUID to sequence only that driver\u2019s tasks',
+            prefixIcon: const Icon(Icons.person_search_outlined, size: 20),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (_routeMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _InlineMessage(
+              message: _routeMessage!,
+              color: Colors.blue.shade50,
+            ),
+          ),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: ElevatedButton.icon(
+            onPressed: _routeLoading ? null : _generateBaselineRoute,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF004E7C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: _routeLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.alt_route, size: 20),
+            label: const Text('Generate baseline route'),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildFleetOptimiser() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Fleet-Wide Distance Optimiser',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+    return _sectionCard(
+      icon: Icons.hub_outlined,
+      title: 'Fleet-Wide Distance Optimiser',
+      children: [
+        Text(
+          'Assigns every unassigned pending task to the nearest available driver, '
+          'minimising total fleet travel distance.',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: ElevatedButton.icon(
+            onPressed: _fleetLoading ? null : _runFleetOptimisation,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF004E7C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Assigns every unassigned pending task to the nearest available driver, '
-              'minimising total fleet travel distance.',
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _fleetLoading ? null : _runFleetOptimisation,
-              icon: _fleetLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.hub),
-              label: const Text('Optimise Fleet Assignments'),
-            ),
-            if (_fleetMessage != null) ...[
-              const SizedBox(height: 8),
-              Text(_fleetMessage!, style: const TextStyle(color: Colors.green)),
-            ],
-            if (_fleetAssignments.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('Suggested Assignments:',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              ..._fleetAssignments.map(
-                (a) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(a['address'] ?? 'Unknown'),
-                  subtitle: Text(
-                    'Driver: ${a['driver_email'] ?? a['driver_id']} '
-                    '(${a['distance_km']}km)',
+            icon: _fleetLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.hub, size: 20),
+            label: const Text('Optimise Fleet Assignments'),
+          ),
+        ),
+        if (_fleetMessage != null) ...[
+          const SizedBox(height: 10),
+          Text(_fleetMessage!,
+              style: TextStyle(color: Colors.green.shade700, fontSize: 13)),
+        ],
+        if (_fleetAssignments.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          const Text('Suggested Assignments:',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          ..._fleetAssignments.map(
+            (a) => Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade200),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(a['address'] ?? 'Unknown',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Driver: ${a['driver_email'] ?? a['driver_id']} (${a['distance_km']}km)',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
                   ),
-                  trailing: ElevatedButton(
+                  OutlinedButton(
                     onPressed: () => _applyFleetAssignment(a),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF004E7C),
+                      side: const BorderSide(color: Color(0xFF004E7C)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
                     child: const Text('Assign'),
                   ),
-                ),
+                ],
               ),
-            ],
-          ],
-        ),
-      ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -944,10 +1788,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         return;
       }
 
-      // 2. Fetch available drivers with locations
+      // 2. Fetch available drivers with locations (no email column on company_members)
       final driverRows = await _client
           .from('company_members')
-          .select('id, email, last_known_location')
+          .select('id, user_id, last_known_location')
           .eq('company_id', config.companyId)
           .eq('role', 'driver')
           .eq('is_available', true);
@@ -958,6 +1802,26 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
           _fleetLoading = false;
         });
         return;
+      }
+
+      // Resolve emails via profiles table
+      final fleetUserIds = (driverRows as List)
+          .map((r) => r['user_id']?.toString())
+          .whereType<String>()
+          .toList();
+      final fleetEmailMap = <String, String>{};
+      if (fleetUserIds.isNotEmpty) {
+        try {
+          final p = await _client
+              .from('profiles')
+              .select('id, email')
+              .inFilter('id', fleetUserIds);
+          for (final row in (p as List)) {
+            final uid = row['id']?.toString();
+            final em = row['email']?.toString();
+            if (uid != null && em != null) fleetEmailMap[uid] = em;
+          }
+        } catch (_) {}
       }
 
       // 3. Geocode task addresses
@@ -1029,11 +1893,13 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         }
 
         if (bestDriver != null) {
+          final bUserId = bestDriver['user_id']?.toString() ?? '';
           assignments.add({
             'task_id': task['id'],
             'address': task['address'],
             'driver_id': bestDriver['id'],
-            'driver_email': bestDriver['email'],
+            'driver_email': fleetEmailMap[bUserId] ??
+                'Driver ${_shortId(bestDriver['id']?.toString() ?? '')}',
             'distance_km': bestDist.toStringAsFixed(2),
           });
         }
@@ -1084,86 +1950,94 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   }
 
   Widget _buildRouteOverview() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Routes & Stop Order',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Refresh routes',
-                  onPressed: _routesLoading ? null : _refreshRoutes,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_routesMessage != null)
-              _InlineMessage(
-                message: _routesMessage!,
-                color: Colors.blue.shade50,
-              ),
-            if (_routesLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_routes.isEmpty)
-              const Text('No routes found yet.')
-            else
-              ..._routes.map(_buildRouteCard),
-          ],
+    return _sectionCard(
+      icon: Icons.map_outlined,
+      title: 'Routes & Stop Order',
+      trailing: '${_routes.length}',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh routes',
+          onPressed: _routesLoading ? null : _refreshRoutes,
+          icon: Icon(Icons.refresh, color: Colors.grey.shade600, size: 20),
         ),
-      ),
+      ],
+      children: [
+        if (_routesMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _InlineMessage(
+              message: _routesMessage!,
+              color: Colors.blue.shade50,
+            ),
+          ),
+        if (_routesLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_routes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.route, size: 40, color: Colors.grey.shade300),
+                  const SizedBox(height: 8),
+                  Text('No routes found yet.',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._routes.map(_buildRouteCard),
+      ],
     );
   }
 
   Widget _buildProofReview() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Proof of Delivery Review',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Refresh PoD',
-                  onPressed: _podLoading ? null : _refreshPod,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_podMessage != null)
-              _InlineMessage(
-                message: _podMessage!,
-                color: Colors.blue.shade50,
-              ),
-            if (_podLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_podRecords.isEmpty)
-              const Text('No proof records found yet.')
-            else
-              ..._podRecords.map(_buildPodCard),
-          ],
+    return _sectionCard(
+      icon: Icons.verified_outlined,
+      title: 'Proof of Delivery Review',
+      trailing: '${_podRecords.length}',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh PoD',
+          onPressed: _podLoading ? null : _refreshPod,
+          icon: Icon(Icons.refresh, color: Colors.grey.shade600, size: 20),
         ),
-      ),
+      ],
+      children: [
+        if (_podMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _InlineMessage(
+              message: _podMessage!,
+              color: Colors.blue.shade50,
+            ),
+          ),
+        if (_podLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_podRecords.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.verified, size: 40, color: Colors.grey.shade300),
+                  const SizedBox(height: 8),
+                  Text('No proof records found yet.',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._podRecords.map(_buildPodCard),
+      ],
     );
   }
 
@@ -1263,44 +2137,50 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   // ===========================================================================
 
   Widget _buildDriverManagement() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Driver Availability',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Refresh drivers',
-                  onPressed: _driversLoading ? null : _refreshDrivers,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_driversMessage != null)
-              _InlineMessage(
-                message: _driversMessage!,
-                color: Colors.blue.shade50,
-              ),
-            if (_driversLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_drivers.isEmpty)
-              const Text('No drivers found. Add drivers to your company.')
-            else
-              ..._drivers.map(_buildDriverCard),
-          ],
+    final availableCount = _drivers.where((d) => d.isAvailable).length;
+    return _sectionCard(
+      icon: Icons.groups_outlined,
+      title: 'Driver Availability',
+      trailing: '$availableCount / ${_drivers.length}',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh drivers',
+          onPressed: _driversLoading ? null : _refreshDrivers,
+          icon: Icon(Icons.refresh, color: Colors.grey.shade600, size: 20),
         ),
-      ),
+      ],
+      children: [
+        if (_driversMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _InlineMessage(
+              message: _driversMessage!,
+              color: Colors.blue.shade50,
+            ),
+          ),
+        if (_driversLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_drivers.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.person_off_outlined,
+                      size: 40, color: Colors.grey.shade300),
+                  const SizedBox(height: 8),
+                  Text('No drivers found. Add drivers to your company.',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._drivers.map(_buildDriverCard),
+      ],
     );
   }
 
@@ -1532,151 +2412,191 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   // ===========================================================================
 
   Widget _buildAdminDriverChat() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Driver Communication',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                if (_selectedChatDriver != null)
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedChatDriver = null;
-                        _chatMessages = const [];
-                      });
-                    },
-                    icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Close'),
-                  ),
-                IconButton(
-                  tooltip: 'Refresh messages',
-                  onPressed: _chatLoading || _selectedChatDriver == null
-                      ? null
-                      : _refreshChatMessages,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
+    return _sectionCard(
+      icon: Icons.chat_outlined,
+      title: 'Driver Communication',
+      actions: [
+        if (_selectedChatDriver != null)
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedChatDriver = null;
+                _chatMessages = const [];
+              });
+            },
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Close', style: TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade600,
             ),
-            const SizedBox(height: 8),
-            if (_chatMessage != null)
-              _InlineMessage(
-                message: _chatMessage!,
-                color: Colors.blue.shade50,
-              ),
-            if (_selectedChatDriver == null)
-              const Text(
-                'Select a driver from the list above to start a conversation.',
-                style: TextStyle(color: Colors.grey),
-              )
-            else ...[
-              Text(
-                'Chatting with: ${_getDriverLabel(_selectedChatDriver!)}',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: _chatLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _chatMessages.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No messages yet. Start the conversation!',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(8),
-                            reverse: true,
-                            itemCount: _chatMessages.length,
-                            itemBuilder: (context, index) {
-                              final msg = _chatMessages[index];
-                              final isMe = msg.isFromAdmin;
-                              return Align(
-                                alignment: isMe
-                                    ? Alignment.centerRight
-                                    : Alignment.centerLeft,
-                                child: Container(
-                                  margin:
-                                      const EdgeInsets.symmetric(vertical: 4),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isMe
-                                        ? Colors.blue.shade100
-                                        : Colors.grey.shade200,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(msg.message),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        DateFormat('HH:mm').format(
-                                          msg.createdAt.toLocal(),
-                                        ),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-              ),
-              const SizedBox(height: 12),
-              Row(
+          ),
+        IconButton(
+          tooltip: 'Refresh messages',
+          onPressed: _chatLoading || _selectedChatDriver == null
+              ? null
+              : _refreshChatMessages,
+          icon: Icon(Icons.refresh, color: Colors.grey.shade600, size: 20),
+        ),
+      ],
+      children: [
+        if (_chatMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _InlineMessage(
+              message: _chatMessage!,
+              color: Colors.blue.shade50,
+            ),
+          ),
+        if (_selectedChatDriver == null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _chatInputController,
-                      decoration: const InputDecoration(
-                        hintText: 'Type a message...',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                      onSubmitted: (_) => _sendChatMessage(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _sendChatMessage,
-                    icon: const Icon(Icons.send),
+                  Icon(Icons.forum_outlined,
+                      size: 40, color: Colors.grey.shade300),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Select a driver from the Fleet tab to start a conversation.',
+                    style: TextStyle(color: Colors.grey.shade500),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _sendBroadcastMessage,
-                icon: const Icon(Icons.campaign),
-                label: const Text('Broadcast to All Drivers'),
+            ),
+          )
+        else ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF004E7C).withOpacity(0.06),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.person, size: 18, color: Color(0xFF004E7C)),
+                const SizedBox(width: 8),
+                Text(
+                  'Chatting with: ${_getDriverLabel(_selectedChatDriver!)}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w500, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 220,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade200),
+              borderRadius: BorderRadius.circular(10),
+              color: Colors.grey.shade50,
+            ),
+            child: _chatLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _chatMessages.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No messages yet. Start the conversation!',
+                          style: TextStyle(color: Colors.grey.shade400),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(10),
+                        reverse: true,
+                        itemCount: _chatMessages.length,
+                        itemBuilder: (context, index) {
+                          final msg = _chatMessages[index];
+                          final isMe = msg.isFromAdmin;
+                          return Align(
+                            alignment: isMe
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              constraints: const BoxConstraints(maxWidth: 320),
+                              decoration: BoxDecoration(
+                                color: isMe
+                                    ? const Color(0xFF004E7C).withOpacity(0.12)
+                                    : Colors.white,
+                                border: Border.all(
+                                  color: isMe
+                                      ? const Color(0xFF004E7C).withOpacity(0.2)
+                                      : Colors.grey.shade200,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(msg.message),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    DateFormat('HH:mm').format(
+                                      msg.createdAt.toLocal(),
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _chatInputController,
+                  decoration: InputDecoration(
+                    hintText: 'Type a message...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                  onSubmitted: (_) => _sendChatMessage(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                onPressed: _sendChatMessage,
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF004E7C),
+                ),
+                icon: const Icon(Icons.send, size: 20),
               ),
             ],
-          ],
-        ),
-      ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: OutlinedButton.icon(
+              onPressed: _sendBroadcastMessage,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF004E7C),
+                side: const BorderSide(color: Color(0xFF004E7C)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.campaign, size: 18),
+              label: const Text('Broadcast to All Drivers'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1828,83 +2748,75 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   // Customer Tracking Lookup
   // ==========================================================================
   Widget _buildCustomerTracking() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return _sectionCard(
+      icon: Icons.local_shipping_outlined,
+      title: 'Customer Tracking Lookup',
+      actions: [
+        if (_trackingLoading)
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+      ],
+      children: [
+        Text(
+          'Look up delivery status using customer tracking code',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+        ),
+        const SizedBox(height: 14),
+        Row(
           children: [
-            Row(
-              children: [
-                const Icon(Icons.search, color: Colors.deepPurple),
-                const SizedBox(width: 8),
-                const Text(
-                  'Customer Tracking Lookup',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                if (_trackingLoading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+            Expanded(
+              child: TextField(
+                controller: _trackingCodeController,
+                decoration: InputDecoration(
+                  labelText: 'Tracking Code',
+                  hintText: 'e.g. OV-ABC1-XYZ2',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Look up delivery status using customer tracking code',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _trackingCodeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tracking Code',
-                      hintText: 'e.g. OV-ABC1-XYZ2',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.qr_code),
-                    ),
-                    textCapitalization: TextCapitalization.characters,
-                    onSubmitted: (_) => _lookupTracking(),
-                  ),
+                  prefixIcon: const Icon(Icons.qr_code, size: 20),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _trackingLoading ? null : _lookupTracking,
-                  icon: const Icon(Icons.search),
-                  label: const Text('Lookup'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_trackingMessage != null) ...[
-              const SizedBox(height: 12),
-              _InlineMessage(
-                message: _trackingMessage!,
-                color:
-                    _trackingResult != null && _trackingResult!['found'] == true
-                        ? Colors.green.shade100
-                        : Colors.orange.shade100,
+                textCapitalization: TextCapitalization.characters,
+                onSubmitted: (_) => _lookupTracking(),
               ),
-            ],
-            if (_trackingResult != null &&
-                _trackingResult!['found'] == true) ...[
-              const SizedBox(height: 16),
-              _buildTrackingResultCard(),
-            ],
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: _trackingLoading ? null : _lookupTracking,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF004E7C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('Lookup'),
+              ),
+            ),
           ],
         ),
-      ),
+        if (_trackingMessage != null) ...[
+          const SizedBox(height: 12),
+          _InlineMessage(
+            message: _trackingMessage!,
+            color: _trackingResult != null && _trackingResult!['found'] == true
+                ? Colors.green.shade100
+                : Colors.orange.shade100,
+          ),
+        ],
+        if (_trackingResult != null && _trackingResult!['found'] == true) ...[
+          const SizedBox(height: 16),
+          _buildTrackingResultCard(),
+        ],
+      ],
     );
   }
 

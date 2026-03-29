@@ -1,0 +1,662 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{amssymb}  % for \square checkbox
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{colortbl}
+
+\definecolor{adminblue}{HTML}{1565C0}
+\definecolor{drivergreen}{HTML}{2E7D32}
+\definecolor{securityred}{HTML}{C62828}
+\definecolor{aiviolet}{HTML}{6A1B9A}
+\definecolor{lightgray}{HTML}{F5F5F5}
+\definecolor{reuseorange}{HTML}{E65100}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=adminblue,
+  urlcolor=adminblue,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textbf{OrderVista Screenshot Capture Guide}}
+\fancyhead[R]{\small\thepage}
+\fancyfoot[C]{\small Abed Al RAHMAN -- CS4514 FYP -- March 2026}
+
+\titleformat{\section}{\large\bfseries\color{adminblue}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\newcommand{\checkbox}{$\square$\;}
+\newcommand{\reuse}[1]{{\color{reuseorange}\textbf{REUSE:} #1}}
+\newcommand{\filesave}[1]{{\ttfamily\small #1}}
+
+\begin{document}
+
+% =====================================================================
+% TITLE
+% =====================================================================
+\begin{center}
+  {\LARGE\bfseries OrderVista: Screenshot Capture Guide}\\[6pt]
+  {\large For CS4514 FYP Final Report}\\[12pt]
+  {\normalsize Generated: March 28, 2026}\\[4pt]
+  {\normalsize\textbf{Total unique screenshots needed: $\sim$34}}\\
+  {\normalsize Total placeholders to fill: 48 screenshots + 30 test status cells}
+\end{center}
+
+\vspace{8pt}
+\noindent\rule{\textwidth}{0.8pt}
+
+% =====================================================================
+% OVERVIEW
+% =====================================================================
+\section{Overview}
+
+\subsection{Where Screenshots Go}
+\begin{itemize}[nosep]
+  \item Save all images as \textbf{PNG} files in \texttt{report/figures/}
+  \item Use the exact filenames listed in this guide (e.g.\ \texttt{ss-a1.png})
+  \item Admin screenshots (Chrome): full browser window, crop to content area
+  \item Driver screenshots (phone): standard Android screenshot (Power + Vol Down)
+  \item Recommended dimensions: Admin $\sim$1280$\times$720+, Driver $\sim$1080$\times$1920+
+\end{itemize}
+
+\subsection{Credentials}
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Role} & \textbf{Email} & \textbf{Where} \\
+  \midrule
+  Admin  & (your admin account)    & Chrome: \texttt{flutter run -d chrome --dart-define-from-file=.env} \\
+  Driver & \texttt{worker2@gmail.com} & Phone: installed APK \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Files That Need Updates}
+\begin{center}
+\begin{tabular}{llr}
+  \toprule
+  \textbf{File} & \textbf{What} & \textbf{Count} \\
+  \midrule
+  \texttt{ch5\_testing.tex}  & Screenshot \texttt{\textbackslash fbox} placeholders & 30 \\
+  \texttt{appendix\_d.tex}   & Screenshot \texttt{\textbackslash fbox} placeholders & 17 \\
+  \texttt{appendix\_e.tex}   & Build terminal screenshot               & 1 \\
+  \texttt{appendix\_f.tex}   & Pass/Fail status cells                  & 30 \\
+  \midrule
+  & \textbf{Total}                                         & \textbf{78} \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Reuse Strategy}
+Many Chapter~5 screenshots can be \textbf{reused} in Appendix~D, so you only need $\sim$34 unique captures. Reuse notes are marked with {\color{reuseorange}\textbf{REUSE}} tags throughout.
+
+\vspace{6pt}
+\noindent\rule{\textwidth}{0.4pt}
+
+% =====================================================================
+% GROUP A: Authentication (2 screenshots)
+% =====================================================================
+\section{Group A: Authentication (2 screenshots)}
+
+\textbf{Platform:} Phone (driver app) \\
+\textbf{When:} Before logging in
+
+\begin{longtable}{@{}p{0.4cm} p{2.8cm} p{6.2cm} p{3.5cm}@{}}
+  \toprule
+  & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+  \checkbox & Login screen &
+    1. Open the OrderVista app on phone.\newline
+    2. You should see the login screen with email/password fields.\newline
+    3. \textbf{Do NOT log in yet.}\newline
+    4. Take screenshot. &
+    \filesave{ss-auth-login.png} \\[6pt]
+
+  \checkbox & Role-based redirect &
+    1. Enter driver credentials and tap Sign In.\newline
+    2. Wait for the driver task list to appear.\newline
+    3. Take screenshot showing the driver dashboard loaded.\newline
+    \reuse{This is also D1 below.} &
+    \filesave{ss-auth-redirect.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}ll@{}}
+  \textbf{Report placement:} & Appendix D -- Authentication section (2 figures) \\
+  \textbf{Ch5 reuse:}        & ss-auth-redirect.png $\to$ also used for fig:ss-d1 \\
+\end{tabular}
+
+% =====================================================================
+% GROUP B: Admin Portal -- Core (12 screenshots)
+% =====================================================================
+\section{Group B: Admin Portal (12 screenshots)}
+
+\textbf{Platform:} Chrome desktop \\
+\textbf{Prerequisite:} Run \texttt{flutter run -d chrome --dart-define-from-file=.env} and log in as admin
+
+\begin{longtable}{@{}p{0.4cm} p{0.6cm} p{2.5cm} p{5.5cm} p{3.0cm}@{}}
+  \toprule
+  & \textbf{ID} & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+
+  \checkbox & A1 & Admin dashboard &
+    1. Log in with admin credentials.\newline
+    2. Screenshot the dashboard showing task list, navigation sidebar, and summary cards. &
+    \filesave{ss-a1.png} \\[6pt]
+
+  \checkbox & A2 & Create new task &
+    1. Click ``+ New Task'' or equivalent.\newline
+    2. Fill in address, driver assignment, schedule.\newline
+    3. Screenshot the filled form \textbf{before} saving. &
+    \filesave{ss-a2.png} \\[6pt]
+
+  \checkbox & A3 & CSV bulk import &
+    1. Navigate to Import.\newline
+    2. Select a CSV file.\newline
+    3. Screenshot showing column mapping dialog or import progress/result. &
+    \filesave{ss-a3.png} \\[6pt]
+
+  \checkbox & A4 & Edit task dialog &
+    1. Click on an existing pending task.\newline
+    2. Open the edit dialog/form.\newline
+    3. Screenshot with fields visible. &
+    \filesave{ss-a4.png} \\[6pt]
+
+  \checkbox & A5 & Delete task &
+    1. Click delete on a task.\newline
+    2. Screenshot the confirmation dialog or the list after deletion. &
+    \filesave{ss-a5.png} \\[6pt]
+
+  \checkbox & A6 & Route generation &
+    1. Select 5+ tasks.\newline
+    2. Click ``Generate Route''.\newline
+    3. Screenshot showing numbered stops on the map preview. &
+    \filesave{ss-a6.png} \\[6pt]
+
+  \checkbox & A7 & Driver recommendation &
+    1. Open a task or route.\newline
+    2. Click ``Recommend Driver''.\newline
+    3. Screenshot the ranked driver list with scores. &
+    \filesave{ss-a7.png} \\[6pt]
+
+  \checkbox & A8 & Fleet optimisation &
+    1. Run fleet-wide task assignment.\newline
+    2. Screenshot the assignment results table. &
+    \filesave{ss-a8.png} \\[6pt]
+
+  \checkbox & A9 & PoD review &
+    1. Navigate to a delivered task.\newline
+    2. Screenshot showing the PoD photo and confirmation code. &
+    \filesave{ss-a9.png} \\[6pt]
+
+  \checkbox & A10 & Admin chat &
+    1. Open Chat section.\newline
+    2. Select a driver conversation.\newline
+    3. Send a message.\newline
+    4. Screenshot the chat thread. &
+    \filesave{ss-a10.png} \\[6pt]
+
+  \checkbox & A11 & Broadcast message &
+    1. In Chat, tap ``Broadcast''.\newline
+    2. Type a message and send.\newline
+    3. Screenshot showing the sent broadcast. &
+    \filesave{ss-a11.png} \\[6pt]
+
+  \checkbox & A12 & AI fleet summary &
+    1. Navigate to AI tab.\newline
+    2. Tap ``Generate Summary''.\newline
+    3. Screenshot the AI-generated fleet summary text. &
+    \filesave{ss-a12.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}lp{12cm}@{}}
+  \textbf{Report placement:} & Ch5 Table 5.1 references (fig:ss-a1 through fig:ss-a12) \\
+  \textbf{Appendix D reuse:} & ss-a1.png $\to$ ``Admin dashboard overview'' \\
+                              & ss-a2.png $\to$ ``Task creation form'' \\
+                              & ss-a3.png $\to$ ``CSV bulk import'' \\
+                              & ss-a6.png $\to$ ``Route sequencing with map preview'' \\
+                              & ss-a7.png $\to$ ``Driver recommendation panel'' \\
+                              & ss-a9.png $\to$ not directly reused (different angle in App D) \\
+                              & ss-a10.png $\to$ ``Admin--driver real-time chat'' \\
+\end{tabular}
+
+% =====================================================================
+% GROUP C: Driver App -- Core Flow (14 screenshots)
+% =====================================================================
+\section{Group C: Driver App -- Core Flow (14 screenshots)}
+
+\textbf{Platform:} Phone (Samsung Galaxy A54) \\
+\textbf{Prerequisite:} Logged in as driver (worker2@gmail.com)
+
+\begin{longtable}{@{}p{0.4cm} p{0.6cm} p{2.5cm} p{5.5cm} p{3.0cm}@{}}
+  \toprule
+  & \textbf{ID} & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+
+  \checkbox & D1 & Driver login / task list &
+    1. After logging in, see the task list with assigned deliveries.\newline
+    2. Screenshot showing status badges and task cards.\newline
+    \reuse{Reuse ss-auth-redirect.png if it shows the task list.} &
+    \filesave{ss-d1.png} \\[6pt]
+
+  \checkbox & D2 & Task detail view &
+    1. Tap on any task card.\newline
+    2. Screenshot showing address, notes, priority, time window, and navigation button. &
+    \filesave{ss-d2.png} \\[6pt]
+
+  \checkbox & D3 & Mark as in-transit &
+    1. On a pending task, tap the status change button (e.g.\ ``Start Delivery'').\newline
+    2. Screenshot showing the badge updated to ``in-transit''. &
+    \filesave{ss-d3.png} \\[6pt]
+
+  \checkbox & D4 & PoD photo capture &
+    1. Tap ``Complete Delivery'' or ``Proof of Delivery''.\newline
+    2. Camera opens -- take a photo of anything.\newline
+    3. Screenshot the camera/preview screen. &
+    \filesave{ss-d4.png} \\[6pt]
+
+  \checkbox & D5 & Task delivered &
+    1. After submitting PoD, the task should show ``delivered'' status.\newline
+    2. Screenshot the confirmation or the updated task card. &
+    \filesave{ss-d5.png} \\[6pt]
+
+  \checkbox & D6 & AI task summary &
+    1. Tap ``AI Summary'' or the AI button on the task list.\newline
+    2. Wait for the summary to generate.\newline
+    3. Screenshot the summary text showing task counts. &
+    \filesave{ss-d6.png} \\[6pt]
+
+  \checkbox & D7 & AI chat conversation &
+    1. Open the AI chat interface.\newline
+    2. Ask a question like ``How many tasks do I have left?''\newline
+    3. Screenshot the conversation showing the AI response. &
+    \filesave{ss-d7.png} \\[6pt]
+
+  \checkbox & D8 & Agentic AI suggestion &
+    1. Ask the AI something actionable, e.g.\ ``Start my next delivery''.\newline
+    2. Screenshot showing the structured action card with an ``Execute'' button. &
+    \filesave{ss-d8.png} \\[6pt]
+
+  \checkbox & D9 & Agentic action executed &
+    1. Tap ``Execute'' on the action card from D8.\newline
+    2. Screenshot the confirmation message after execution. &
+    \filesave{ss-d9.png} \\[6pt]
+
+  \checkbox & D10 & Mid-shift re-sequence &
+    1. After completing a task, observe the re-sequence banner or updated task order.\newline
+    2. Screenshot showing the new order based on GPS. &
+    \filesave{ss-d10.png} \\[6pt]
+
+  \checkbox & D11 & Offline mode &
+    1. Turn on Airplane Mode.\newline
+    2. Try to mark a task as delivered.\newline
+    3. Screenshot showing the offline indicator and queued sync count.\newline
+    4. \textbf{Turn Airplane Mode back off after.} &
+    \filesave{ss-d11.png} \\[6pt]
+
+  \checkbox & D12 & Chat from admin &
+    1. (Have admin send a message first from Chrome.)\newline
+    2. Open Chat tab on driver app.\newline
+    3. Screenshot showing the received message. &
+    \filesave{ss-d12.png} \\[6pt]
+
+  \checkbox & D13 & Availability toggle &
+    1. Find the availability toggle (top of task list or settings).\newline
+    2. Toggle it.\newline
+    3. Screenshot showing the updated status. &
+    \filesave{ss-d13.png} \\[6pt]
+
+  \checkbox & D14 & Sign out &
+    1. Tap sign out / logout.\newline
+    2. Screenshot the login screen after signing out. &
+    \filesave{ss-d14.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}lp{12cm}@{}}
+  \textbf{Report placement:} & Ch5 Table 5.2 references (fig:ss-d1 through fig:ss-d14) \\
+  \textbf{Appendix D reuse:} & ss-d1.png $\to$ ``Driver task list'' \\
+                              & ss-d2.png $\to$ ``Task detail and navigation'' \\
+                              & ss-d4.png $\to$ ``Proof of delivery capture'' \\
+                              & ss-d6.png or ss-d7.png $\to$ ``AI assistant: summary and chat'' \\
+                              & ss-d8.png $\to$ ``Agentic AI action with one-tap execution'' \\
+                              & ss-d13.png $\to$ ``Driver telemetry panel'' (if toggle is in telemetry panel) \\
+                              & ss-d11.png $\to$ ``Offline mode with sync queue'' \\
+\end{tabular}
+
+% =====================================================================
+% GROUP D: Security -- RLS (1 screenshot)
+% =====================================================================
+\section{Group D: Security -- RLS Verification (1 screenshot)}
+
+\textbf{Platform:} Browser (Supabase Dashboard SQL Editor)
+
+\begin{longtable}{@{}p{0.4cm} p{2.8cm} p{6.2cm} p{3.5cm}@{}}
+  \toprule
+  & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+  \checkbox & RLS 0-rows result &
+    1. Go to \texttt{supabase.com/dashboard} $\to$ your project $\to$ SQL Editor.\newline
+    2. Run a query like:\newline
+    \texttt{SELECT * FROM tasks WHERE company\_id = '<other\_company\_uuid>';}\newline
+    3. Screenshot showing \textbf{0 rows returned}.\newline
+    (Or use the Supabase client authenticated as Company A querying Company B.) &
+    \filesave{ss-rls.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}ll@{}}
+  \textbf{Report placement:} & Ch5 Section 5.5 -- fig:ss-rls \\
+\end{tabular}
+
+% =====================================================================
+% GROUP E: Route Comparison (1 screenshot -- optional)
+% =====================================================================
+\section{Group E: Route Comparison (1 screenshot, optional)}
+
+\textbf{Platform:} Chrome (admin portal)
+
+\begin{longtable}{@{}p{0.4cm} p{2.8cm} p{6.2cm} p{3.5cm}@{}}
+  \toprule
+  & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+  \checkbox & Baseline vs optimised &
+    1. If the app shows a route comparison view or you can overlay two routes on the map, capture that.\newline
+    2. Otherwise, screenshot the optimised route map from A6 is sufficient.\newline
+    3. This placeholder is marked ``optional'' in the report. &
+    \filesave{ss-route-compare.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}ll@{}}
+  \textbf{Report placement:} & Ch5 Section 5.6 -- fig:ss-route-compare \\
+  \textbf{Fallback:}         & Reuse \filesave{ss-a6.png} if no separate comparison view exists \\
+\end{tabular}
+
+% =====================================================================
+% GROUP F: AI Evaluation (2 screenshots)
+% =====================================================================
+\section{Group F: AI Evaluation (2 screenshots)}
+
+\textbf{Platform:} Phone (driver app)
+
+\begin{longtable}{@{}p{0.4cm} p{2.8cm} p{6.2cm} p{3.5cm}@{}}
+  \toprule
+  & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+  \checkbox & AI summary accuracy &
+    1. With multiple tasks (mix of pending/in-transit/delivered), tap AI Summary.\newline
+    2. Screenshot the summary showing \textbf{accurate task counts}.\newline
+    \reuse{Can reuse ss-d6.png if it clearly shows counts.} &
+    \filesave{ss-ai-summary.png} \\[6pt]
+
+  \checkbox & Agentic JSON response &
+    1. In the AI chat, trigger an agentic response.\newline
+    2. Screenshot showing the \textbf{structured JSON action card} (type, parameters, execute button).\newline
+    \reuse{Can reuse ss-d8.png if it shows the structured card clearly.} &
+    \filesave{ss-agentic-json.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}ll@{}}
+  \textbf{Report placement:} & Ch5 Sections 5.7.1 (fig:ss-ai-summary) and 5.7.2 (fig:ss-agentic-json) \\
+\end{tabular}
+
+% =====================================================================
+% GROUP G: Appendix D Extras (3-5 unique screenshots)
+% =====================================================================
+\section{Group G: Appendix D -- Extra Screenshots Not Covered Above}
+
+Most Appendix D screenshots are reused from Groups B and C. These are the ones that may need \textbf{dedicated captures}:
+
+\begin{longtable}{@{}p{0.4cm} p{3.0cm} p{5.8cm} p{3.5cm}@{}}
+  \toprule
+  & \textbf{What to Capture} & \textbf{Details} & \textbf{Save As} \\
+  \midrule
+
+  \checkbox & Fleet management view &
+    Admin portal: Navigate to Fleet/Vehicles section showing vehicle list and driver assignments.\newline
+    (Not directly covered by A1--A12.) &
+    \filesave{ss-appd-fleet.png} \\[6pt]
+
+  \checkbox & Customer tracking page &
+    Open the customer-facing tracking page (via tracking code URL or QR).\newline
+    Screenshot showing delivery status. &
+    \filesave{ss-appd-tracking.png} \\[6pt]
+
+  \checkbox & Driver telemetry panel &
+    On driver app: expand the telemetry panel showing location status and last ping time.\newline
+    \reuse{May overlap with ss-d13.png.} &
+    \filesave{ss-appd-telemetry.png} \\
+  \bottomrule
+\end{longtable}
+
+% =====================================================================
+% GROUP H: Build Evidence (1 screenshot)
+% =====================================================================
+\section{Group H: Build Terminal Output (1 screenshot)}
+
+\textbf{Platform:} VS Code terminal or PowerShell
+
+\begin{longtable}{@{}p{0.4cm} p{2.8cm} p{6.2cm} p{3.5cm}@{}}
+  \toprule
+  & \textbf{What to Capture} & \textbf{Step-by-Step} & \textbf{Save As} \\
+  \midrule
+  \checkbox & Build success output &
+    1. Run: \texttt{flutter build apk --release --dart-define-from-file=.env}\newline
+    2. Wait for build to complete.\newline
+    3. Screenshot the terminal showing the green checkmark / ``Built build\textbackslash app\textbackslash outputs\textbackslash ...'' success line. &
+    \filesave{ss-build-output.png} \\
+  \bottomrule
+\end{longtable}
+
+\medskip
+\begin{tabular}{@{}ll@{}}
+  \textbf{Report placement:} & Appendix E -- Build and Deployment Evidence \\
+\end{tabular}
+
+% =====================================================================
+% REUSE MAP
+% =====================================================================
+\section{Complete Reuse Map}
+
+This table shows exactly which unique screenshot file fills which report placeholder(s). \textbf{Bold} = primary capture location; regular = reuse target.
+
+\begin{longtable}{@{}p{3.5cm} p{4.5cm} p{5.0cm}@{}}
+  \toprule
+  \textbf{Filename} & \textbf{Ch5 / Appendix E} & \textbf{Appendix D} \\
+  \midrule
+  \filesave{ss-auth-login.png}     & --                          & \textbf{Auth: Login screen} \\
+  \filesave{ss-auth-redirect.png}  & fig:ss-d1 (= D1)           & \textbf{Auth: Role-based redirect} \\
+  \filesave{ss-a1.png}             & \textbf{fig:ss-a1}          & Admin dashboard overview \\
+  \filesave{ss-a2.png}             & \textbf{fig:ss-a2}          & Task creation form \\
+  \filesave{ss-a3.png}             & \textbf{fig:ss-a3}          & CSV bulk import \\
+  \filesave{ss-a4.png}             & \textbf{fig:ss-a4}          & -- \\
+  \filesave{ss-a5.png}             & \textbf{fig:ss-a5}          & -- \\
+  \filesave{ss-a6.png}             & \textbf{fig:ss-a6}          & Route sequencing \\
+  \filesave{ss-a7.png}             & \textbf{fig:ss-a7}          & Driver recommendation panel \\
+  \filesave{ss-a8.png}             & \textbf{fig:ss-a8}          & -- \\
+  \filesave{ss-a9.png}             & \textbf{fig:ss-a9}          & -- \\
+  \filesave{ss-a10.png}            & \textbf{fig:ss-a10}         & Admin--driver chat \\
+  \filesave{ss-a11.png}            & \textbf{fig:ss-a11}         & -- \\
+  \filesave{ss-a12.png}            & \textbf{fig:ss-a12}         & -- \\
+  \filesave{ss-d1.png}             & \textbf{fig:ss-d1}          & Driver task list \\
+  \filesave{ss-d2.png}             & \textbf{fig:ss-d2}          & Task detail and navigation \\
+  \filesave{ss-d3.png}             & \textbf{fig:ss-d3}          & -- \\
+  \filesave{ss-d4.png}             & \textbf{fig:ss-d4}          & Proof of delivery capture \\
+  \filesave{ss-d5.png}             & \textbf{fig:ss-d5}          & -- \\
+  \filesave{ss-d6.png}             & \textbf{fig:ss-d6}          & AI assistant: summary \\
+  \filesave{ss-d7.png}             & \textbf{fig:ss-d7}          & -- \\
+  \filesave{ss-d8.png}             & \textbf{fig:ss-d8}          & Agentic AI action \\
+  \filesave{ss-d9.png}             & \textbf{fig:ss-d9}          & -- \\
+  \filesave{ss-d10.png}            & \textbf{fig:ss-d10}         & -- \\
+  \filesave{ss-d11.png}            & \textbf{fig:ss-d11}         & Offline mode with sync queue \\
+  \filesave{ss-d12.png}            & \textbf{fig:ss-d12}         & -- \\
+  \filesave{ss-d13.png}            & \textbf{fig:ss-d13}         & -- \\
+  \filesave{ss-d14.png}            & \textbf{fig:ss-d14}         & -- \\
+  \filesave{ss-rls.png}            & \textbf{fig:ss-rls}         & -- \\
+  \filesave{ss-route-compare.png}  & \textbf{fig:ss-route-compare} & -- \\
+  \filesave{ss-ai-summary.png}     & \textbf{fig:ss-ai-summary}  & -- \\
+  \filesave{ss-agentic-json.png}   & \textbf{fig:ss-agentic-json} & -- \\
+  \filesave{ss-appd-fleet.png}     & --                          & \textbf{Fleet management} \\
+  \filesave{ss-appd-tracking.png}  & --                          & \textbf{Customer tracking} \\
+  \filesave{ss-appd-telemetry.png} & --                          & \textbf{Driver telemetry panel} \\
+  \filesave{ss-build-output.png}   & \textbf{Appendix E}         & -- \\
+  \bottomrule
+\end{longtable}
+
+% =====================================================================
+% RECOMMENDED ORDER
+% =====================================================================
+\section{Recommended Capture Order}
+
+To minimise app switching, follow this sequence:
+
+\begin{enumerate}[label=\textbf{Step \arabic*:}, leftmargin=3.5em]
+  \item \textbf{Phone -- Before login} (Group A)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-auth-login.png
+  \end{itemize}
+
+  \item \textbf{Phone -- Log in as driver, do full driver flow} (Group C)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-d1.png (task list after login = also ss-auth-redirect)
+    \item[\checkbox] ss-d2.png (tap a task)
+    \item[\checkbox] ss-d3.png (mark in-transit)
+    \item[\checkbox] ss-d4.png (PoD camera)
+    \item[\checkbox] ss-d5.png (delivered confirmation)
+    \item[\checkbox] ss-d13.png (toggle availability)
+    \item[\checkbox] ss-appd-telemetry.png (telemetry panel)
+  \end{itemize}
+
+  \item \textbf{Phone -- AI features} (Groups C + F)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-d6.png / ss-ai-summary.png (AI summary)
+    \item[\checkbox] ss-d7.png (AI chat)
+    \item[\checkbox] ss-d8.png / ss-agentic-json.png (agentic suggestion)
+    \item[\checkbox] ss-d9.png (execute agentic action)
+    \item[\checkbox] ss-d10.png (re-sequence banner after completion)
+  \end{itemize}
+
+  \item \textbf{Phone -- Chat + Offline} (Group C continued)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-d12.png (receive chat from admin -- coordinate with Step 6)
+    \item[\checkbox] ss-d11.png (airplane mode $\to$ offline delivery $\to$ sync)
+  \end{itemize}
+
+  \item \textbf{Phone -- Sign out}
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-d14.png (sign out $\to$ login screen)
+  \end{itemize}
+
+  \item \textbf{Chrome -- Admin portal} (Group B)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-a1.png (dashboard)
+    \item[\checkbox] ss-a2.png (create task)
+    \item[\checkbox] ss-a3.png (CSV import)
+    \item[\checkbox] ss-a4.png (edit task)
+    \item[\checkbox] ss-a5.png (delete task)
+    \item[\checkbox] ss-a6.png (generate route)
+    \item[\checkbox] ss-a7.png (driver recommendation)
+    \item[\checkbox] ss-a8.png (fleet optimisation)
+    \item[\checkbox] ss-a9.png (PoD review)
+    \item[\checkbox] ss-a10.png (chat with driver -- also triggers ss-d12 on phone)
+    \item[\checkbox] ss-a11.png (broadcast)
+    \item[\checkbox] ss-a12.png (AI fleet summary)
+  \end{itemize}
+
+  \item \textbf{Chrome -- Admin extras} (Group G)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-appd-fleet.png (fleet management view)
+    \item[\checkbox] ss-appd-tracking.png (customer tracking page)
+  \end{itemize}
+
+  \item \textbf{Supabase Dashboard} (Group D)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-rls.png (SQL editor showing 0 rows)
+  \end{itemize}
+
+  \item \textbf{VS Code Terminal} (Group H)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-build-output.png (flutter build apk output)
+  \end{itemize}
+
+  \item \textbf{Optional} (Group E)
+  \begin{itemize}[nosep]
+    \item[\checkbox] ss-route-compare.png (if a comparison view exists; otherwise reuse ss-a6)
+  \end{itemize}
+\end{enumerate}
+
+% =====================================================================
+% APPENDIX F CHECKLIST
+% =====================================================================
+\section{Appendix F: Test Status Cells (30 entries)}
+
+After taking all screenshots and confirming each feature works, update these 30 \texttt{\textbackslash textit\{Placeholder\}} cells in \texttt{appendix\_f.tex} with \textbf{Pass} or \textbf{Fail}:
+
+\begin{center}
+\begin{longtable}{@{}p{0.4cm} p{1.2cm} p{4.5cm} p{1.5cm} p{4.5cm}@{}}
+  \toprule
+  & \textbf{ID} & \textbf{Test} & \textbf{Result} & \textbf{Notes} \\
+  \midrule
+
+  \checkbox & A1  & Admin login            & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A2  & Create single task     & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A3  & Edit existing task     & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A4  & Delete task            & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A5  & CSV bulk import        & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A6  & Generate optimised route & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A7  & Assign driver to route & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A8  & Driver recommendation  & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A9  & Review PoD             & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A10 & Send chat message      & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A11 & Broadcast message      & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & A12 & AI fleet summary       & \rule{1.5cm}{0.4pt} & \\
+  \midrule
+  \checkbox & D1  & Driver login           & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D2  & View assigned tasks    & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D3  & View task details      & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D4  & Navigate to task       & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D5  & Capture PoD photo      & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D6  & Scan barcode/QR        & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D7  & AI task summary        & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D8  & AI conversational chat & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D9  & Agentic AI action      & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D10 & Execute AI action      & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D11 & Driver chat            & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D12 & Toggle availability    & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D13 & Mid-shift re-sequence  & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & D14 & Offline task viewing   & \rule{1.5cm}{0.4pt} & \\
+  \midrule
+  \checkbox & S1  & RLS cross-tenant       & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & S2  & Driver cannot delete   & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & S3  & Unauth tracking        & \rule{1.5cm}{0.4pt} & \\
+  \checkbox & S4  & Invalid tracking code  & \rule{1.5cm}{0.4pt} & \\
+  \bottomrule
+\end{longtable}
+\end{center}
+
+\vspace{12pt}
+\noindent\rule{\textwidth}{0.8pt}
+\begin{center}
+  \textbf{Total unique screenshots: $\sim$34} \quad|\quad
+  \textbf{Total report placeholders: 48} \quad|\quad
+  \textbf{Test status cells: 30}\\[6pt]
+  After all captures, give me the filenames and I will replace every placeholder in the report for you.
+\end{center}
+
+\end{document}

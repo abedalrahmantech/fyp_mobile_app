@@ -433,26 +433,41 @@ class _TaskListScreenState extends State<TaskListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OrderVista Dispatch'),
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: _availabilityLoading
-              ? const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : Switch(
-                  value: _isAvailable,
-                  onChanged: (_) => _toggleAvailability(),
-                  activeThumbColor: Colors.green,
-                  inactiveThumbColor: Colors.grey,
-                ),
+        automaticallyImplyLeading: false,
+        titleSpacing: 16,
+        title: GestureDetector(
+          onTap: _availabilityLoading ? null : _toggleAvailability,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _availabilityLoading
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color:
+                            _isAvailable ? Colors.green : Colors.grey.shade400,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _isAvailable
+                              ? Colors.green.shade700
+                              : Colors.grey,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+              const SizedBox(width: 10),
+              const Text('OrderVista'),
+            ],
+          ),
         ),
         actions: [
-          // Admin messages with badge
+          // Notification bell with badge
           Stack(
             children: [
               IconButton(
@@ -488,42 +503,78 @@ class _TaskListScreenState extends State<TaskListScreen> {
             ],
           ),
           IconButton(
-            tooltip: 'Admin portal',
-            onPressed: () => context.push('/admin'),
-            icon: const Icon(Icons.admin_panel_settings_outlined),
-          ),
-          IconButton(
-            tooltip: 'Sign out',
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              if (mounted) {
-                setState(() {});
-              }
-            },
-            icon: const Icon(Icons.logout),
-          ),
-          IconButton(
             tooltip: 'AI chat',
             onPressed: _chatLoading ? null : _openAiChat,
             icon: const Icon(Icons.chat_bubble_outline),
           ),
-          IconButton(
-            tooltip: 'AI summary',
-            onPressed: _aiLoading ? null : _runAiSummary,
-            icon: _aiLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.bolt_outlined),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 'ai_summary':
+                  if (!_aiLoading) _runAiSummary();
+                case 'admin':
+                  context.push('/admin');
+                case 'sign_out':
+                  Supabase.instance.client.auth.signOut().then((_) {
+                    if (mounted) setState(() {});
+                  });
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'ai_summary',
+                child: ListTile(
+                  leading: Icon(
+                    _aiLoading ? Icons.hourglass_top : Icons.bolt_outlined,
+                  ),
+                  title: const Text('AI Summary'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'admin',
+                child: ListTile(
+                  leading: Icon(Icons.admin_panel_settings_outlined),
+                  title: Text('Admin Portal'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'sign_out',
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Sign Out'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+            ],
           ),
-          const _LastSyncedIndicator(),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _resequencing ? null : _resequenceRoute,
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        icon: _resequencing
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.route, size: 20),
+        label: const Text('Re-sequence'),
       ),
       body: Consumer<TaskViewModel>(
         builder: (context, vm, _) => Column(
           children: [
+            const _SyncStatusStrip(),
             // AI Proactive Suggestion Card
             if (_currentAiAction != null)
               _AiSuggestionCard(
@@ -534,14 +585,12 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 executing: _aiActionExecuting,
               ),
             if (_aiSuggestionLoading) const LinearProgressIndicator(),
-            // Route re-sequence bar
-            _RouteResequenceBar(
-              hasOverride: vm.hasRouteOverride,
-              lastTime: vm.lastResequenceTime,
-              loading: _resequencing,
-              onResequence: _resequenceRoute,
-              onClear: _clearRouteOverride,
-            ),
+            // Route override banner
+            if (vm.hasRouteOverride && vm.lastResequenceTime != null)
+              _RouteOverrideBanner(
+                time: vm.lastResequenceTime!,
+                onClear: _clearRouteOverride,
+              ),
             const Expanded(child: _TaskListBody()),
           ],
         ),
@@ -873,10 +922,13 @@ class _TaskCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    task.id,
+                    task.id.length > 8
+                        ? '${task.id.substring(0, 8)}\u2026'
+                        : task.id,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 if (urgency != null) ...[
@@ -924,21 +976,20 @@ class _TaskCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: task.status.toLowerCase() == 'delivered'
-                        ? null
-                        : () => _handleMarkDelivered(context, task),
-                    icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Mark as Delivered'),
-                  ),
+                ElevatedButton.icon(
+                  onPressed: task.status.toLowerCase() == 'delivered'
+                      ? null
+                      : () => _handleMarkDelivered(context, task),
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('Delivered'),
                 ),
-                const SizedBox(width: 12),
                 OutlinedButton.icon(
                   onPressed: () => _promptProofCode(context, task),
-                  icon: const Icon(Icons.qr_code_scanner_outlined),
+                  icon: const Icon(Icons.qr_code_scanner_outlined, size: 18),
                   label: const Text('Proof of Delivery'),
                 ),
               ],
@@ -1120,6 +1171,7 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
   bool _autoEnabled = false;
   Timer? _autoTimer;
   GeoPoint? _autoTargetPoint;
+  bool _telemetryExpanded = false;
 
   @override
   void dispose() {
@@ -1143,114 +1195,153 @@ class _TelemetryPanelState extends State<_TelemetryPanel> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Telemetry & Geofence (Manual Stub)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Enter a location to simulate a device update and check proximity to a task.',
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _latController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Latitude',
-                      hintText: '22.3027',
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () =>
+                setState(() => _telemetryExpanded = !_telemetryExpanded),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.sensors, size: 20, color: Colors.teal),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Telemetry & Geofence',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _lngController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Longitude',
-                      hintText: '114.1772',
-                    ),
+                  Icon(
+                    _telemetryExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: Colors.grey,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedTaskId,
-              items: tasks
-                  .map(
-                    (task) => DropdownMenuItem(
-                      value: task.id,
-                      child: Text('${task.id} • ${task.address}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() => _selectedTaskId = value),
-              decoration: const InputDecoration(labelText: 'Target task'),
-            ),
-            const SizedBox(height: 12),
-            if (_message != null)
-              _InlineNotice(
-                message: _message!,
-                usingDemoData: false,
-                isOffline: false,
-                lastCacheUpdate: null,
+                ],
               ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _working ? null : () => _checkProximity(config),
-                    icon: _working
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.place_outlined),
-                    label: const Text('Check proximity'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: _working ? null : () => _sendTelemetry(config),
-                  icon: const Icon(Icons.near_me_outlined),
-                  label: const Text('Send telemetry'),
-                ),
-              ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        _working ? null : () => _toggleLiveTelemetry(config),
-                    icon: Icon(
-                      _autoEnabled ? Icons.stop_circle : Icons.play_circle,
-                    ),
-                    label: Text(
-                      _autoEnabled
-                          ? 'Stop live telemetry'
-                          : 'Start live telemetry',
-                    ),
+          ),
+          if (_telemetryExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Enter a location to simulate a device update and check proximity to a task.',
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _latController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Latitude',
+                            hintText: '22.3027',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _lngController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Longitude',
+                            hintText: '114.1772',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedTaskId,
+                    isExpanded: true,
+                    items: tasks
+                        .map(
+                          (task) => DropdownMenuItem(
+                            value: task.id,
+                            child: Text(
+                              '${task.id.length > 8 ? task.id.substring(0, 8) : task.id}\u2026 • ${task.address}',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedTaskId = value),
+                    decoration: const InputDecoration(labelText: 'Target task'),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_message != null)
+                    _InlineNotice(
+                      message: _message!,
+                      usingDemoData: false,
+                      isOffline: false,
+                      lastCacheUpdate: null,
+                    ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed:
+                            _working ? null : () => _checkProximity(config),
+                        icon: _working
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.place_outlined, size: 18),
+                        label: const Text('Check proximity'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _working ? null : () => _sendTelemetry(config),
+                        icon: const Icon(Icons.near_me_outlined, size: 18),
+                        label: const Text('Send telemetry'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _working
+                              ? null
+                              : () => _toggleLiveTelemetry(config),
+                          icon: Icon(
+                            _autoEnabled
+                                ? Icons.stop_circle
+                                : Icons.play_circle,
+                          ),
+                          label: Text(
+                            _autoEnabled
+                                ? 'Stop live telemetry'
+                                : 'Start live telemetry',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -1571,56 +1662,6 @@ class _InlineNotice extends StatelessWidget {
   }
 }
 
-class _LastSyncedIndicator extends StatelessWidget {
-  const _LastSyncedIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<TaskViewModel>(
-      builder: (context, viewModel, _) {
-        final theme = Theme.of(context);
-        final textTheme = theme.textTheme;
-        final label = _buildLabel(viewModel);
-        final color =
-            viewModel.isOffline ? Colors.orange : textTheme.bodySmall?.color;
-
-        return Padding(
-          padding: const EdgeInsets.only(right: 16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                label,
-                style: textTheme.bodySmall?.copyWith(color: color),
-                textAlign: TextAlign.right,
-              ),
-              if (viewModel.isOffline)
-                Text(
-                  'Offline mode',
-                  style: textTheme.labelSmall
-                      ?.copyWith(color: Colors.orange.shade700),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  String _buildLabel(TaskViewModel viewModel) {
-    if (viewModel.isLoading) {
-      return 'Syncing…';
-    }
-
-    if (viewModel.lastSuccessfulSync != null) {
-      return 'Last sync ${_formatDate(viewModel.lastSuccessfulSync!)}';
-    }
-
-    return 'Not synced yet';
-  }
-}
-
 class _PendingSyncBanner extends StatelessWidget {
   const _PendingSyncBanner({required this.count, required this.onSync});
 
@@ -1799,72 +1840,6 @@ class _AiSuggestionCard extends StatelessWidget {
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RouteResequenceBar extends StatelessWidget {
-  const _RouteResequenceBar({
-    required this.hasOverride,
-    required this.lastTime,
-    required this.loading,
-    required this.onResequence,
-    required this.onClear,
-  });
-
-  final bool hasOverride;
-  final DateTime? lastTime;
-  final bool loading;
-  final VoidCallback onResequence;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: hasOverride && lastTime != null
-                ? Text(
-                    'Route optimised ${DateFormat.Hm().format(lastTime!)}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.green.shade700),
-                  )
-                : const SizedBox.shrink(),
-          ),
-          if (hasOverride)
-            TextButton.icon(
-              onPressed: onClear,
-              icon: const Icon(Icons.clear, size: 16),
-              label: const Text('Reset'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.grey.shade700,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-            ),
-          const SizedBox(width: 4),
-          ElevatedButton.icon(
-            onPressed: loading ? null : onResequence,
-            icon: loading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.route, size: 18),
-            label: const Text('Re-sequence'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              textStyle: const TextStyle(fontSize: 13),
-            ),
-          ),
         ],
       ),
     );
@@ -2206,6 +2181,83 @@ class _AdminMessagesSheet extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+// ── Sync status strip (replaces the old in-AppBar _LastSyncedIndicator) ──
+
+class _SyncStatusStrip extends StatelessWidget {
+  const _SyncStatusStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<TaskViewModel>(
+      builder: (context, viewModel, _) {
+        final isOffline = viewModel.isOffline;
+
+        String label;
+        if (viewModel.isLoading) {
+          label = 'Syncing\u2026';
+        } else if (viewModel.lastSuccessfulSync != null) {
+          label =
+              'Last sync ${DateFormat('MMM d \u2022 HH:mm').format(viewModel.lastSuccessfulSync!)}';
+        } else {
+          label = 'Not synced yet';
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          color: isOffline ? Colors.orange.shade50 : Colors.grey.shade100,
+          child: Text(
+            isOffline ? '$label  \u2022  Offline mode' : label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isOffline ? Colors.orange.shade800 : Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Route override banner (shown when a re-sequence is active) ──
+
+class _RouteOverrideBanner extends StatelessWidget {
+  const _RouteOverrideBanner({required this.time, required this.onClear});
+
+  final DateTime time;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, size: 16, color: Colors.green.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Route optimised ${DateFormat.Hm().format(time)}',
+              style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: Icon(Icons.close, size: 16, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
     );
   }
 }
