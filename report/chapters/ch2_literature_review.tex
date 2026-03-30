@@ -1,0 +1,117 @@
+% Chapter 2: Literature Review
+\chapter{Literature Review}
+\label{ch:literature}
+
+This chapter examines the theoretical foundations and existing technologies that inform the design of OrderVista. Each subsection reviews a distinct research area, identifies the current state of the art, and explicitly notes how the findings shaped a specific design decision in the platform.
+
+% ──────────────────────────────────────────────
+\section{Vehicle Routing and Path Optimisation}
+\label{sec:lit-routing}
+
+The Vehicle Routing Problem (VRP) seeks optimal routes for a fleet of vehicles serving geographically distributed customers while minimising total travel distance, time, or cost \autocite{toth2002vehicle}. First formalised over six decades ago \autocite{dantzig1959truck}, the VRP is classified as NP-hard, meaning exact solutions become computationally intractable as the number of stops grows \autocite{laporte2009fifty}.
+
+\paragraph{Foundational algorithms.}
+Dijkstra's algorithm computes shortest paths in weighted graphs and remains the standard for point-to-point navigation \autocite{dijkstra1959note}. The A* extension adds a heuristic estimate of remaining distance, reducing search space while preserving optimality \autocite{hart1968formal}. Both algorithms address single-pair routing rather than multi-stop sequencing.
+
+\paragraph{Metaheuristic approaches.}
+For multi-stop problems at practical scale, metaheuristics trade optimality guarantees for tractable computation. Ant Colony Optimisation (ACO) simulates foraging behaviour, with artificial pheromone trails reinforcing shorter routes across iterations \autocite{dorigo1997ant}. Genetic algorithms evolve populations of candidate routes through selection, crossover, and mutation, demonstrating versatility across VRP variants such as the Green VRP that targets emission minimisation \autocite{erdogan2012green}.
+
+\paragraph{Design implication.}
+OrderVista adopts a nearest-neighbour (NN) greedy heuristic as its baseline sequencing algorithm. While NN does not guarantee global optimality, its $O(n^{2})$ complexity provides sub-second response times suitable for real-time, on-device re-sequencing after each delivery. The architecture is designed so that NN can be replaced by a more sophisticated solver (e.g., 2-opt local search or ACO) without modifying the surrounding workflow. This trade-off is revisited in Chapter~\ref{ch:discussion}.
+
+% ──────────────────────────────────────────────
+\section{Real-Time Traffic and Dynamic Adaptation}
+\label{sec:lit-traffic}
+
+Effective urban routing must account for the dynamic nature of traffic. A route planned at the start of a shift may become suboptimal as congestion develops. Floating Car Data (FCD) systems collect anonymised, timestamped GPS data from vehicles with navigation applications, enabling real-time speed estimates across road segments \autocite{herrera2010evaluation}. Modern navigation services such as Google Maps leverage FCD from large user populations to provide traffic-aware routing.
+
+\paragraph{Design implication.}
+OrderVista does not implement its own traffic model; instead, it delegates turn-by-turn navigation to external mapping applications that already ingest FCD. The platform's contribution is \emph{mid-shift re-sequencing}: after each task completion, the remaining task list is re-ordered from the driver's current GPS position using the Haversine formula, ensuring the sequence adapts to the driver's actual location rather than the original depot.
+
+% ──────────────────────────────────────────────
+\section{Offline-First Mobile Architectures}
+\label{sec:lit-offline}
+
+Drivers operating in areas with intermittent connectivity (underground car parks, dense urban canyons, or rural fringe zones) require applications that remain functional without a network connection. Offline-first architectures address this by caching essential data locally and deferring synchronisation until connectivity is restored.
+
+\paragraph{Design implication.}
+OrderVista uses Drift, a reactive persistence library for Flutter \autocite{drift2026docs}, to maintain a local SQLite mirror of assigned tasks. An exponential-backoff sync queue ensures that proof-of-delivery submissions and status updates made offline are eventually propagated to the server without data loss.
+
+% ──────────────────────────────────────────────
+\section{Proof of Delivery and Last-Mile Digitisation}
+\label{sec:lit-pod}
+
+The last mile is the most operationally expensive segment of the logistics chain, and proof of delivery (PoD) is its definitive confirmation. Traditional paper-based PoD introduces administrative delays, documentation gaps, and limited real-time visibility \autocite{bhattacharjee2024digitizing}. Digital PoD mechanisms such as photographs, GPS-stamped timestamps, and delivery notes captured on mobile devices reduce manual errors, accelerate invoice reconciliation, and strengthen the chain of custody required for dispute resolution.
+
+\paragraph{Design implication.}
+OrderVista enforces photographic PoD capture as a prerequisite before a task can transition to the \texttt{completed} state. This architectural constraint, implemented at both the UI and database levels, ensures that every delivery is documented regardless of individual driver compliance habits.
+
+% ──────────────────────────────────────────────
+\section{Multi-Tenant Security and Data Isolation}
+\label{sec:lit-rls}
+
+Multi-tenancy enables multiple organisations to share infrastructure while maintaining logical data separation. Three primary approaches exist: separate databases per tenant, separate schemas within a shared database, and shared tables with row-level access controls \autocite{abdul2018multitenant,gao2011nonintrusive}. Separate databases provide the strongest isolation but incur significant operational overhead as tenant populations grow. Shared-table approaches maximise resource efficiency but shift the isolation burden to access-control correctness \autocite{gao2011nonintrusive}.
+
+Row-Level Security (RLS) enforces tenant isolation at the database layer itself: security policies attached to tables filter every query according to the authenticated user's identity and organisational membership \autocite{aws2020rls,postgresql2026rls}. Because enforcement occurs below the application layer, even bugs in application code cannot bypass tenant boundaries.
+
+\paragraph{Design implication.}
+OrderVista deploys PostgreSQL RLS policies across all operational tables. A helper function \texttt{is\_company\_member()} evaluates the caller's JWT against the \texttt{company\_members} table, ensuring that every \texttt{SELECT}, \texttt{INSERT}, \texttt{UPDATE}, and \texttt{DELETE} is automatically scoped to the user's company. This design was chosen over application-level filtering because it provides defence-in-depth and eliminates an entire class of cross-tenant data leakage bugs.
+
+% ──────────────────────────────────────────────
+\section{Large Language Models in Logistics}
+\label{sec:lit-llm}
+
+Large language models (LLMs) have evolved from rule-based chatbots to neural models capable of flexible natural-language interaction across diverse domains \autocite{brown2020language}. In enterprise contexts, LLMs can synthesise information, answer free-form queries, and reduce cognitive load by presenting complex data in natural language rather than structured dashboards \autocite{brynjolfsson2023generative}.
+
+For logistics specifically, potential applications include automated shift summaries, natural-language task queries (e.g., ``What is my next delivery?''), and workload analysis. Despite growing interest in AI-augmented logistics tools \autocite{addepto2024genai}, comprehensive platforms that tightly integrate LLMs with operational workflows (task management, routing, PoD, and multi-tenant access) remain limited.
+
+\paragraph{Design implication.}
+OrderVista integrates the DeepSeek R1 reasoning model \autocite{deepseek2025r1} via the OpenRouter gateway \autocite{openrouter2026docs} for two primary functions: (i)~automated task-batch summarisation that converts structured task data into natural-language driver briefings, and (ii)~a conversational chat interface that grounds responses in the user's live task context.
+
+% ──────────────────────────────────────────────
+\section{LLM Reliability and Agentic AI}
+\label{sec:lit-agentic}
+
+A critical deployment concern is \emph{hallucination}: the tendency of LLMs to generate plausible but factually incorrect outputs \autocite{ji2024hallucination}. In logistics, hallucinated content could misdirect drivers, produce inaccurate delivery summaries, or generate misleading customer notifications. Mitigation strategies include grounding model inputs in trusted system data, restricting outputs to high-confidence actions, and maintaining human-in-the-loop oversight \autocite{ji2024hallucination,brynjolfsson2023generative}.
+
+Beyond passive question-answering, \emph{agentic AI} refers to LLM-based systems that can invoke tools and trigger workflow actions, for example sending a notification or updating a task status, rather than generating text alone. Agentic systems amplify both potential benefit (reduced manual coordination) and potential risk (unintended actions from hallucinated reasoning). Safeguards such as action confirmation dialogs, structured output schemas, and restricted tool access are therefore essential.
+
+\paragraph{Design implication.}
+OrderVista's agentic layer uses a structured JSON action schema: the LLM returns a typed action object (e.g., \texttt{mark\_task\_complete}, \texttt{send\_notification}) rather than executing arbitrary code. Each proposed action is rendered as a confirmation card in the driver's UI, requiring explicit one-tap approval before execution. This design limits the blast radius of hallucinated outputs while preserving the efficiency gains of AI-initiated actions.
+
+% ──────────────────────────────────────────────
+\section{Comparative Positioning}
+\label{sec:lit-comparison}
+
+Existing delivery management solutions fall into three broad categories \autocite{cachon2017surge,einav2016peer}:
+
+\begin{enumerate}
+  \item \textbf{On-demand gig platforms} (e.g., Uber Eats, foodpanda): high-volume dispatch with standardised courier workflows, but limited operator-specific control and constrained by marketplace-wide policies.
+  \item \textbf{Enterprise dispatch systems}: configurable job creation, driver assignment, and progress monitoring, but with setup costs and training overhead that can be prohibitive for SMEs.
+  \item \textbf{Navigation-first tools} (e.g., Google Maps): mature point-to-point routing with real-time traffic, but no dispatch primitives, task lifecycle, or PoD.
+\end{enumerate}
+
+Table~\ref{tab:comparison} summarises the key capability gaps that OrderVista addresses.
+
+\begin{table}[ht]
+\centering
+\caption{Feature comparison across delivery system categories.}
+\label{tab:comparison}
+\small
+\begin{tabularx}{\textwidth}{@{}X c c c c@{}}
+\toprule
+\textbf{Capability} & \textbf{Gig} & \textbf{Enterprise} & \textbf{Nav-first} & \textbf{OrderVista} \\
+\midrule
+Task lifecycle management       & \checkmark & \checkmark & ---        & \checkmark \\
+Driver assignment / dispatching & \checkmark & \checkmark & ---        & \checkmark \\
+Multi-stop route sequencing     & $\sim$     & $\sim$     & $\sim$     & \checkmark \\
+Hong Kong workflow fit          & $\sim$     & $\sim$     & ---        & \checkmark \\
+Natural-language AI assistance  & ---        & ---        & ---        & \checkmark \\
+Agentic AI with safeguards      & ---        & ---        & ---        & \checkmark \\
+Multi-tenant RLS isolation      & $\sim$     & $\sim$     & ---        & \checkmark \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Research gap.}
+No publicly available platform combines unified task lifecycle management, AI-powered natural-language assistance (including agentic capabilities), multi-tenant RLS-enforced security, and explicit optimisation for Hong Kong's dense urban delivery environment within a single, SME-accessible system. OrderVista is designed to occupy this position.

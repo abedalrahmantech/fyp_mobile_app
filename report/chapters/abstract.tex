@@ -1,0 +1,79 @@
+\chapter*{Extended Abstract}
+\addcontentsline{toc}{chapter}{Extended Abstract}
+
+Last-mile delivery is the most expensive and operationally complex segment of the
+logistics supply chain, yet small and medium-sized enterprises (SMEs) in Hong Kong
+still rely on fragmented, manually coordinated tools for dispatching, navigation,
+and proof of delivery.  Commercially available platforms either target large-scale
+operators with heavyweight enterprise integrations or offer only basic route
+planning without AI assistance, real-time coordination, or multi-tenant security.
+This project addresses that gap by designing, implementing, and evaluating
+\textbf{OrderVista}, an AI-enhanced logistics dispatch platform that unifies
+administrative dispatching and driver-side field operations within a single
+cross-platform application.
+
+The system is built with Flutter (targeting Android and web from one codebase),
+Supabase (PostgreSQL with Row-Level Security, authentication, real-time
+subscriptions, and object storage), Mapbox (forward geocoding and static map
+visualisation), and the DeepSeek R1 large language model accessed via the
+OpenRouter gateway.  The architecture follows a layered, offline-first design:
+a Drift-powered SQLite cache provides instant startup and queued offline
+mutations, while a service--repository layer mediates between the local database
+and the cloud backend.
+
+Fourteen objectives were defined, spanning six core platform goals and eight
+advanced optimisation targets.  All fourteen were achieved:
+
+\begin{itemize}
+  \item A \textbf{unified administrative portal} supporting task creation, CSV
+        bulk import with geocoding, route generation, driver assignment, proof-of-delivery
+        review, fleet management, and real-time chat.
+  \item A \textbf{driver mobile application} with optimised task lists, turn-by-turn
+        navigation handoff, camera-based proof capture (photo plus barcode/QR scan),
+        telemetry reporting, and an AI assistant.
+  \item A \textbf{nearest-neighbour route sequencing algorithm} enhanced with
+        Haversine distance, mid-shift GPS-based re-sequencing, dynamic priority
+        recalculation, and fleet-wide multi-driver distance minimisation, yielding a
+        measured 25--31\% reduction in total delivery distance on representative
+        test scenarios.
+  \item An \textbf{agentic AI assistant} that goes beyond conventional chatbot
+        summarisation: the DeepSeek model returns structured JSON actions
+        (e.g.\ ``send notification'', ``reassign task'') which are surfaced as
+        one-tap execution cards with explicit human-oversight safeguards.  In
+        evaluation, the agent correctly identified and structured the appropriate
+        action in six out of six test prompts.
+  \item \textbf{Enterprise-grade multi-tenant security} via over twenty PostgreSQL
+        Row-Level Security policies, a centralised \texttt{is\_company\_member()}
+        helper, and a three-role RBAC model (driver, dispatcher, admin).
+        Cross-tenant query tests confirmed complete data isolation.
+  \item A \textbf{performance-aware driver recommendation engine} combining
+        availability, GPS proximity, current workload, completion rate, and average
+        delivery time into a composite score computed by a server-side SQL function.
+  \item \textbf{Customer-facing delivery tracking} through auto-generated
+        tracking codes and a public RPC endpoint requiring no authentication.
+\end{itemize}
+
+The system was evaluated through over 26~functional test cases executed across
+both admin and driver roles on a physical Android device, supplemented by
+unit tests for algorithmic components and dedicated RLS security verification.
+Route optimisation was benchmarked against unsequenced baselines; AI quality
+was assessed for both summary accuracy and agentic action correctness.
+All objectives were mapped to test evidence confirming full compliance.
+
+The principal contributions of this project are threefold.  First, it
+demonstrates that agentic AI (where a language model proposes structured
+workflow actions under human oversight) is a viable and practical pattern
+for logistics decision support, an application area where existing research
+has not yet explored LLM-driven action execution.  Second, it shows that
+PostgreSQL Row-Level Security can enforce tenant isolation at the database
+layer without application-side middleware, offering a lightweight
+multi-tenancy model suitable for SME platforms.  Third, it validates an
+offline-first mobile architecture with deterministic sync-queue processing
+and exponential backoff, ensuring field operability in connectivity-poor
+environments common to Hong Kong's dense urban infrastructure.
+
+The signed Android release APK (75.7\,MB) constitutes a fully functional
+prototype suitable for demonstration and further development toward
+commercial viability.
+
+\newpage

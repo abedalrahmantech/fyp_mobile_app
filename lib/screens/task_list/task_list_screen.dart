@@ -706,16 +706,87 @@ class _TaskListScreenState extends State<TaskListScreen> {
                           alignment: isUser
                               ? Alignment.centerRight
                               : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isUser
-                                  ? Colors.blue.shade50
-                                  : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(message.content),
+                          child: Column(
+                            crossAxisAlignment: isUser
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.symmetric(vertical: 6),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isUser
+                                      ? Colors.blue.shade50
+                                      : Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(message.content),
+                              ),
+                              if (message.action != null)
+                                Container(
+                                  margin:
+                                      const EdgeInsets.only(bottom: 8, top: 2),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.deepPurple.shade50,
+                                        Colors.blue.shade50,
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.deepPurple.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.auto_awesome,
+                                        size: 16,
+                                        color: Colors.deepPurple.shade700,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          message.action!.actionLabel,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.deepPurple.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          _executeAiAction(message.action!);
+                                        },
+                                        icon: const Icon(
+                                            Icons.play_arrow_rounded,
+                                            size: 18),
+                                        label: const Text('Execute'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.deepPurple,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          textStyle:
+                                              const TextStyle(fontSize: 13),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },
@@ -798,11 +869,39 @@ class _TaskListScreenState extends State<TaskListScreen> {
             .toList(),
         systemPrompt: systemPrompt,
       );
+
+      // Detect actionable intent and get structured action
+      AiAction? chatAction;
+      final lowerText = text.toLowerCase();
+      const actionKeywords = [
+        'start',
+        'deliver',
+        'next',
+        'begin',
+        'go available',
+        'go offline',
+        'sync',
+        'refresh',
+        'mark',
+      ];
+      if (actionKeywords.any((k) => lowerText.contains(k))) {
+        try {
+          chatAction = await service.getAgenticSuggestion(
+            tasks: viewModel.tasks,
+            isAvailable: true,
+            pendingSyncCount: viewModel.pendingSyncCount,
+          );
+          if (!chatAction.isActionable) chatAction = null;
+        } catch (_) {
+          chatAction = null;
+        }
+      }
       service.dispose();
 
       _chatMessages.add(_ChatMessage(
         role: 'assistant',
         content: response ?? 'No response.',
+        action: chatAction,
       ));
       setModalState(() {});
     } catch (e) {
@@ -839,10 +938,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
 }
 
 class _ChatMessage {
-  const _ChatMessage({required this.role, required this.content});
+  const _ChatMessage({required this.role, required this.content, this.action});
 
   final String role;
   final String content;
+  final AiAction? action;
 }
 
 class _TaskListBody extends StatelessWidget {
@@ -913,91 +1013,380 @@ class _TaskCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    task.id.length > 8
-                        ? '${task.id.substring(0, 8)}\u2026'
-                        : task.id,
-                    style: theme.textTheme.titleMedium?.copyWith(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showTaskDetail(context, task, config),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      task.id.length > 8
+                          ? '${task.id.substring(0, 8)}\u2026'
+                          : task.id,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (urgency != null) ...[
+                    _UrgencyBadge(label: urgency),
+                    const SizedBox(width: 6),
+                  ],
+                  Chip(
+                    label: Text(task.status.toUpperCase()),
+                    backgroundColor: statusColor.withValues(alpha: 0.15),
+                    labelStyle: theme.textTheme.labelMedium?.copyWith(
+                      color: statusColor,
                       fontWeight: FontWeight.w600,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                if (urgency != null) ...[
-                  _UrgencyBadge(label: urgency),
-                  const SizedBox(width: 6),
                 ],
-                Chip(
-                  label: Text(task.status.toUpperCase()),
-                  backgroundColor: statusColor.withValues(alpha: 0.15),
-                  labelStyle: theme.textTheme.labelMedium?.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                task.address,
+                style: theme.textTheme.bodyLarge,
+              ),
+              if (task.scheduledAt != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Scheduled: ${_formatDate(task.scheduledAt!)}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+              if (task.proofPhotoUrl != null &&
+                  task.proofPhotoUrl!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'PoD Photo: ${task.proofPhotoUrl}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+              const SizedBox(height: 16),
+              _TaskMapPreview(
+                address: task.address,
+                mapboxToken: config.mapboxAccessToken,
+                countryCode: config.mapboxCountryCode,
+                proximity: GeoPoint(
+                  lat: config.mapboxProximityLat,
+                  lng: config.mapboxProximityLng,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (task.status.toLowerCase() == 'pending')
+                    ElevatedButton.icon(
+                      onPressed: () => _handleStartDelivery(context, task),
+                      icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                      label: const Text('Start Delivery'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1CB5E0),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ElevatedButton.icon(
+                    onPressed: task.status.toLowerCase() == 'delivered'
+                        ? null
+                        : () => _handleMarkDelivered(context, task),
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Delivered'),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              task.address,
-              style: theme.textTheme.bodyLarge,
-            ),
-            if (task.scheduledAt != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Scheduled: ${_formatDate(task.scheduledAt!)}',
-                style: theme.textTheme.bodySmall,
+                  OutlinedButton.icon(
+                    onPressed: () => _promptProofCode(context, task),
+                    icon: const Icon(Icons.qr_code_scanner_outlined, size: 18),
+                    label: const Text('Proof of Delivery'),
+                  ),
+                ],
               ),
             ],
-            if (task.proofPhotoUrl != null &&
-                task.proofPhotoUrl!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'PoD Photo: ${task.proofPhotoUrl}',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-            const SizedBox(height: 16),
-            _TaskMapPreview(
-              address: task.address,
-              mapboxToken: config.mapboxAccessToken,
-              countryCode: config.mapboxCountryCode,
-              proximity: GeoPoint(
-                lat: config.mapboxProximityLat,
-                lng: config.mapboxProximityLng,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: task.status.toLowerCase() == 'delivered'
-                      ? null
-                      : () => _handleMarkDelivered(context, task),
-                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                  label: const Text('Delivered'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _promptProofCode(context, task),
-                  icon: const Icon(Icons.qr_code_scanner_outlined, size: 18),
-                  label: const Text('Proof of Delivery'),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  void _showTaskDetail(
+      BuildContext context, DeliveryTask task, AppConfig config) {
+    final theme = Theme.of(context);
+    final statusColor = AppTheme.statusColor(task.status);
+    final priorityLabels = {0: 'Normal', 1: 'Medium', 2: 'High', 3: 'Urgent'};
+    final priorityColors = {
+      0: Colors.grey,
+      1: Colors.blue,
+      2: Colors.orange,
+      3: Colors.red,
+    };
+    final pLabel = priorityLabels[task.priority] ?? 'Priority ${task.priority}';
+    final pColor = priorityColors[task.priority] ?? Colors.grey;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.65,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (_, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  // Header row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Task ${task.id.length > 12 ? '${task.id.substring(0, 12)}…' : task.id}',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Chip(
+                        label: Text(task.status.toUpperCase()),
+                        backgroundColor: statusColor.withValues(alpha: 0.15),
+                        labelStyle: theme.textTheme.labelMedium?.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  // Address
+                  _detailRow(
+                    icon: Icons.location_on_outlined,
+                    label: 'Address',
+                    value: task.address,
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 14),
+                  // Priority
+                  _detailRow(
+                    icon: Icons.flag_outlined,
+                    label: 'Priority',
+                    value: pLabel,
+                    theme: theme,
+                    valueColor: pColor,
+                  ),
+                  const SizedBox(height: 14),
+                  // Time window
+                  _detailRow(
+                    icon: Icons.schedule_outlined,
+                    label: 'Time Window',
+                    value: task.scheduledAt != null
+                        ? _formatDate(task.scheduledAt!)
+                        : 'No scheduled time',
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 14),
+                  // Notes
+                  _detailRow(
+                    icon: Icons.notes_outlined,
+                    label: 'Notes',
+                    value: 'Standard delivery — handle with care',
+                    theme: theme,
+                  ),
+                  if (task.proofCode != null && task.proofCode!.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _detailRow(
+                      icon: Icons.verified_outlined,
+                      label: 'Proof Code',
+                      value: task.proofCode!,
+                      theme: theme,
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  // Map preview
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      height: 160,
+                      width: double.infinity,
+                      child: _TaskMapPreview(
+                        address: task.address,
+                        mapboxToken: config.mapboxAccessToken,
+                        countryCode: config.mapboxCountryCode,
+                        proximity: GeoPoint(
+                          lat: config.mapboxProximityLat,
+                          lng: config.mapboxProximityLng,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Action buttons
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final encoded = Uri.encodeComponent(task.address);
+                        final mapUrl = Uri.parse(
+                          'https://www.google.com/maps/dir/?api=1&destination=$encoded',
+                        );
+                        if (await canLaunchUrl(mapUrl)) {
+                          await launchUrl(mapUrl,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      icon: const Icon(Icons.navigation_outlined),
+                      label: const Text('Navigate to Address'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF004E7C),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (task.status.toLowerCase() == 'pending')
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _handleStartDelivery(context, task);
+                          },
+                          icon: const Icon(Icons.local_shipping_outlined,
+                              size: 18),
+                          label: const Text('Start Delivery'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1CB5E0),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: task.status.toLowerCase() == 'delivered'
+                              ? null
+                              : () {
+                                  Navigator.of(ctx).pop();
+                                  _handleMarkDelivered(context, task);
+                                },
+                          icon:
+                              const Icon(Icons.check_circle_outline, size: 18),
+                          label: const Text('Mark Delivered'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _promptProofCode(context, task);
+                          },
+                          icon: const Icon(Icons.qr_code_scanner_outlined,
+                              size: 18),
+                          label: const Text('PoD'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static Widget _detailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required ThemeData theme,
+    Color? valueColor,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF004E7C)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: valueColor,
+                  fontWeight: valueColor != null ? FontWeight.w600 : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleStartDelivery(
+      BuildContext context, DeliveryTask task) async {
+    final viewModel = context.read<TaskViewModel>();
+    try {
+      await viewModel.updateTaskStatus(task.id, 'in-transit');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Task ${task.id} is now in-transit.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text(viewModel.errorMessage ?? 'Failed to start delivery.')),
+        );
+      }
+    }
   }
 
   Future<void> _handleMarkDelivered(

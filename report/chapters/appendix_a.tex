@@ -1,0 +1,108 @@
+﻿% Appendix A: Monthly Logs
+\chapter{Monthly Logs}
+\label{app:logs}
+
+This appendix records the monthly development activities from project inception to submission.
+Each entry was reviewed with the project supervisor at the corresponding monthly meeting.
+
+%--------------------------------------------------------------
+\section*{October 2025: Research and Foundation}
+\addcontentsline{toc}{section}{October 2025}
+
+\begin{itemize}
+  \item Conducted literature review on vehicle routing (TSP/VRP), traffic-data integration,
+        offline-first mobile patterns, and LLM applications in supply-chain management.
+  \item Performed competitor analysis of existing logistics platforms (Onfleet, Route4Me, Circuit)
+        with a focus on the Hong Kong operational context.
+  \item Initialised the Flutter project, configured version control (Git/GitHub), and created
+        the blank application scaffold with navigation placeholders.
+  \item Established the technical roadmap and consolidated design notes for subsequent phases.
+\end{itemize}
+
+%--------------------------------------------------------------
+\section*{November 2025: UI Prototyping and Architecture}
+\addcontentsline{toc}{section}{November 2025}
+
+\begin{itemize}
+  \item Implemented consistent theming, layout conventions, and reusable UI components
+        (cards, tiles, status badges) to establish a unified design language.
+  \item Set up state management with Provider and navigation with GoRouter.
+  \item Drafted early domain models for tasks, routes, vehicles, and company members.
+  \item Built mock screens for order tracking, delivery routing, and task overview to
+        visualise the intended workflows.
+  \item Documented key design decisions and planned extension points.
+\end{itemize}
+
+%--------------------------------------------------------------
+\section*{December 2025: Backend Schema and Offline Layer}
+\addcontentsline{toc}{section}{December 2025}
+
+\begin{itemize}
+  \item Formalised environment management via \texttt{.env}, a centralised \texttt{AppConfig}
+        singleton, and a bootstrap layer for dependency injection.
+  \item Authored the complete Supabase database schema: 12~core tables, helper functions,
+        Row-Level Security policies, and tenant seed data
+        (migration \texttt{20251208\_initial\_schema.sql}).
+  \item Integrated Drift (SQLite) for the driver-side offline cache with cached task
+        persistence and demo seeding.
+  \item Prepared the backend contract document and updated the milestone plan.
+  \item Submitted Interim Report~I.
+\end{itemize}
+
+%--------------------------------------------------------------
+\section*{January 2026: Supabase Integration and Live Data}
+\addcontentsline{toc}{section}{January 2026}
+
+\begin{itemize}
+  \item Replaced mock REST calls with live Supabase queries; the service layer now fetches
+        driver tasks filtered by company and driver ID while respecting RLS policies.
+  \item Implemented the Drift cache strategy: present cached data on startup, synchronise
+        with remote updates asynchronously.
+  \item Populated \texttt{.env} with Supabase credentials, Mapbox tokens, and
+        OpenRouter/DeepSeek API key.
+  \item Enhanced the task-list UI with connectivity-state indicators
+        (live / cached / demo-seeded) and last-sync timestamps.
+  \item By month-end the driver client successfully read real tasks from Supabase and cached
+        them locally.
+\end{itemize}
+
+%--------------------------------------------------------------
+\section*{February 2026: Feature Development and IR\,II}
+\addcontentsline{toc}{section}{February 2026}
+
+\begin{itemize}
+  \item \textbf{Driver app:} Completed proof-of-delivery workflows (barcode/QR scan,
+        photo capture, Supabase Storage upload), telemetry panel (manual/continuous pings,
+        geofence alerts), and DeepSeek AI integration (one-tap summary, conversational chat).
+  \item \textbf{Admin portal:} Built task creation with Mapbox geocoding, driver assignment,
+        scheduling, CSV bulk import with flexible column mappings and chunked inserts,
+        nearest-neighbour route sequencer with static-map preview, and PoD review panel.
+  \item \textbf{Security:} Authored RLS policies for all sensitive tables; implemented
+        \texttt{is\_company\_member()} helper, email-to-UUID resolution RPC, and
+        role-based permission enforcement (admin/dispatcher/driver).
+  \item \textbf{Chat and availability:} Added real-time admin--driver chat
+        (migration \texttt{20260205\_driver\_availability\_\allowbreak chat.sql}), driver availability
+        toggle, and location-aware driver status.
+  \item Submitted Interim Report~II.
+\end{itemize}
+
+%--------------------------------------------------------------
+\section*{March 2026: Advanced Features, Testing, and Submission}
+\addcontentsline{toc}{section}{March 2026}
+
+\begin{itemize}
+  \item \textbf{Optimisation:} Implemented fleet-wide distance-minimisation algorithm,
+        mid-shift GPS re-sequencing, dynamic priority recalculation, and
+        performance-aware driver recommendation (migration
+        \texttt{20260210\_driver\_perf\_\allowbreak recommendation.sql}).
+  \item \textbf{Agentic AI:} Extended the AI assistant with structured JSON action parsing,
+        one-tap execution confirmations, and human-oversight safeguards.
+  \item \textbf{Customer features:} Tracking-code generation, QR-code-based status lookup,
+        and automated delivery notifications.
+  \item \textbf{Testing:} Performed over 26~functional test cases across admin and driver
+        roles, RLS cross-tenant verification, route-optimisation evaluation
+        (25--31\% distance reduction), and AI accuracy assessment.
+  \item Built signed Android release APK (75.7\,MB).
+  \item Finalised the report, recorded the demonstration video, and prepared
+        presentation slides.
+\end{itemize}

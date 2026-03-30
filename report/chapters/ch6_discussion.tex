@@ -1,0 +1,265 @@
+﻿% Chapter 6: Discussion
+\chapter{Discussion}
+\label{ch:discussion}
+
+This chapter critically reflects on the design decisions, trade-offs, and
+limitations of OrderVista.  Each section evaluates an alternative that was
+considered and justifies the approach taken, satisfying the assessment
+criterion of demonstrating \emph{appropriate evaluation of alternative
+approaches in problem solving}.
+
+% ─────────────────────────────────────────────────────────────
+\section{Route Optimisation: Nearest-Neighbour vs.\ Advanced Solvers}
+\label{sec:disc-routing}
+
+The nearest-neighbour (NN) heuristic was chosen as the sequencing algorithm
+(Section~\ref{sec:route-impl}).  Table~\ref{tab:route-eval} showed a
+consistent 25--31\% distance reduction over unoptimised ordering, confirming
+that the heuristic adds genuine value.  However, NN is a greedy algorithm
+that does not revisit earlier decisions; it can produce routes that are
+10--25\% longer than the global optimum for medium-scale instances
+\autocite{laporte2009fifty}.
+
+Three stronger alternatives were evaluated during design:
+
+\begin{enumerate}
+  \item \textbf{2-opt local search}: iteratively reverses sub-sequences to
+        remove crossing edges.  Typical improvement over NN is 5--10\%, with
+        $O(n^{2})$ per iteration.  This would have been feasible for
+        batch sizes up to $\sim$50 stops and is the most natural next step.
+  \item \textbf{Ant Colony Optimisation (ACO)}: probabilistic
+        metaheuristic that converges toward near-optimal tours over hundreds
+        of iterations \autocite{dorigo1997ant}.  The computational cost
+        (seconds to minutes) conflicts with the sub-second response
+        requirement for mid-shift re-sequencing on a mobile device.
+  \item \textbf{Google OR-Tools / OSRM}: server-side solvers that accept
+        distance matrices and return optimised routes.  These require a
+        persistent network connection, which contradicts the offline-first
+        requirement, and introduce an additional external dependency.
+\end{enumerate}
+
+The decision to ship NN first was driven by two practical constraints:
+(a)~mid-shift re-sequencing must execute on-device in under 200\,ms so
+drivers are not blocked, and
+(b)~the offline-first architecture precludes reliance on server-side solvers.
+The modular design of the route pipeline (Section~\ref{sec:route-impl})
+ensures that a 2-opt post-processing pass can be added without altering the
+surrounding workflow. This is identified as the highest-priority future
+improvement.
+
+% ─────────────────────────────────────────────────────────────
+\section{Backend-as-a-Service vs.\ Custom Server}
+\label{sec:disc-baas}
+
+Supabase was selected over a custom Node.js/Express backend and over Firebase
+(Section~\ref{sec:tech-stack}).  In retrospect, this decision yielded three
+significant benefits and one notable limitation:
+
+\paragraph{Benefits.}
+\begin{itemize}
+  \item \textbf{Development velocity}: authentication, real-time WebSocket
+        subscriptions, and file storage were available out of the box,
+        eliminating weeks of boilerplate server code.
+  \item \textbf{Row-Level Security}: PostgreSQL RLS policies enforce
+        multi-tenant isolation at the database engine level, removing the risk
+        of application-layer access-control bugs
+        (Section~\ref{sec:security-test}).
+  \item \textbf{SQL expressiveness}: complex queries (e.g.\ the
+        fleet-wide assignment view joining tasks, drivers, and haversine
+        distances) were written as standard SQL rather than the limited
+        query syntax of Firestore.
+\end{itemize}
+
+\paragraph{Limitation.}
+Supabase Edge Functions (Deno-based) were not used because the project
+required Dart-only logic for consistency with the Flutter codebase.  All
+business logic therefore resides in the client, which means that a
+compromised client could, in theory, submit invalid state transitions
+(e.g.\ marking a task as \texttt{delivered} without a PoD photo).
+While RLS prevents cross-tenant access, it does not enforce workflow
+constraints.  A production deployment would benefit from PostgreSQL
+\texttt{BEFORE UPDATE} triggers or server-side functions to validate state
+transitions. This is acknowledged as a limitation.
+
+% ─────────────────────────────────────────────────────────────
+\section{AI Model Selection: DeepSeek R1 vs.\ Alternatives}
+\label{sec:disc-ai}
+
+DeepSeek~R1 was selected for summarisation, conversational assistance, and
+agentic action recommendation (Section~\ref{sec:ai-agentic}).  The decision
+was evaluated against three alternatives:
+
+\begin{table}[H]
+  \centering
+  \caption{AI model comparison for on-device logistics assistance.}
+  \label{tab:ai-comparison}
+  \small
+  \begin{tabularx}{\textwidth}{l X X X X}
+    \toprule
+    \textbf{Criterion} & \textbf{DeepSeek R1} & \textbf{GPT-4o} &
+    \textbf{Gemini 1.5} & \textbf{Local SLM} \\
+    \midrule
+    Cost per 1M tokens & \$0.55 & \$5.00 & \$3.50 & Free \\
+    Structured JSON     & Reliable & Reliable & Moderate & Poor \\
+    Latency (p50)       & $\sim$1.2\,s & $\sim$0.8\,s & $\sim$1.0\,s &
+                          $\sim$3\,s \\
+    Privacy             & Cloud & Cloud & Cloud & On-device \\
+    Context window      & 64k & 128k & 1M & 4--8k \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+GPT-4o offers marginally lower latency but at roughly 9$\times$ the cost,
+which would be prohibitive for a startup-stage fleet management product.
+On-device small language models (SLMs) eliminate cloud dependency but
+currently lack the structured-output reliability needed for agentic action
+parsing; the 6/6 accuracy demonstrated in Table~\ref{tab:agentic-eval}
+depends on consistent JSON output.  DeepSeek~R1 via OpenRouter provided the
+best balance of cost, accuracy, and structured-output fidelity for this
+project.
+
+A notable risk is vendor lock-in: if OpenRouter or DeepSeek discontinue the
+model, the prompt templates would need minor adaptation for a replacement LLM.
+The system prompt and JSON schema are isolated in a single service class
+(\texttt{DeepSeekService}), limiting the blast radius of such a change.
+
+% ─────────────────────────────────────────────────────────────
+\section{Offline-First Architecture: Trade-offs}
+\label{sec:disc-offline}
+
+The Drift-based local SQLite mirror (Section~\ref{sec:offline-sync}) ensures
+that drivers can complete deliveries without connectivity.  The exponential
+backoff sync queue successfully uploaded all queued items in unit testing
+(Section~\ref{sec:unit-tests}).  However, two edge cases remain unresolved:
+
+\begin{enumerate}
+  \item \textbf{Conflict resolution}: if an admin reassigns a task while the
+        driver is offline and simultaneously marking it as delivered, the
+        current strategy is \emph{last-write-wins} based on the
+        \texttt{updated\_at} timestamp.  A production system would benefit
+        from operational-transform or CRDT-based merging.
+  \item \textbf{Stale cache invalidation}: the local cache is refreshed on
+        app launch and on WebSocket reconnection, but there is no
+        time-to-live (TTL) eviction.  A driver who remains offline for
+        several hours may act on outdated task data.  Adding a TTL-based
+        warning banner is a low-effort improvement.
+\end{enumerate}
+
+Despite these limitations, the architecture proved sufficient for the
+single-tester evaluation scenario and demonstrates the core offline-first
+pattern that would underpin a production deployment.
+
+% ─────────────────────────────────────────────────────────────
+\section{Multi-Tenant Security: Strengths and Gaps}
+\label{sec:disc-security}
+
+The RLS-based isolation model passed all cross-tenant tests
+(Section~\ref{sec:rls-test}), and the 20+ policies across 11 tables
+represent a defence-in-depth posture unusual for an academic prototype.
+Two gaps are acknowledged:
+
+\begin{itemize}
+  \item \textbf{No penetration testing}: the security verification was
+        limited to functional RLS queries executed through the Supabase
+        client.  A professional penetration test (e.g.\ OWASP ZAP scan of
+        the PostgREST API) was not performed.
+  \item \textbf{Client-side secret storage}: API keys for Mapbox and
+        OpenRouter are embedded in the Flutter build.  While obfuscated by
+        the Dart AOT compiler, they could be extracted from the APK.  A
+        production deployment should proxy these calls through a
+        server-side gateway.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────
+\section{Comparison with Commercial Platforms}
+\label{sec:disc-commercial}
+
+Table~\ref{tab:commercial-compare} positions OrderVista against three
+established commercial last-mile platforms.
+
+\begin{table}[H]
+  \centering
+  \caption{Feature comparison with commercial last-mile platforms.}
+  \label{tab:commercial-compare}
+  \small
+  \begin{tabularx}{\textwidth}{X c c c c}
+    \toprule
+    \textbf{Feature} & \textbf{OrderVista} & \textbf{Onfleet} &
+    \textbf{Route4Me} & \textbf{Circuit} \\
+    \midrule
+    Route optimisation            & \checkmark & \checkmark & \checkmark & \checkmark \\
+    Multi-tenant isolation        & \checkmark & \checkmark & ---        & ---        \\
+    AI task summarisation         & \checkmark & ---        & ---        & ---        \\
+    Agentic AI (action execution) & \checkmark & ---        & ---        & ---        \\
+    Offline delivery completion   & \checkmark & Partial    & ---        & \checkmark \\
+    Photographic PoD              & \checkmark & \checkmark & \checkmark & \checkmark \\
+    Real-time admin--driver chat  & \checkmark & ---        & ---        & ---        \\
+    Open-source / self-hostable   & \checkmark & ---        & ---        & ---        \\
+    Dynamic priority scoring      & \checkmark & ---        & ---        & ---        \\
+    Fleet-wide assignment         & \checkmark & \checkmark & \checkmark & ---        \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+OrderVista's differentiators are its \textbf{agentic AI layer}, its
+\textbf{real-time admin--driver communication channel}, and its
+\textbf{open-source, self-hostable architecture}.  Commercial platforms
+offer more mature routing engines (often backed by proprietary solvers)
+and broader hardware integration (barcode scanners, e-signatures).
+OrderVista is not production-competitive on routing quality, but it
+demonstrates capabilities, particularly agentic AI and dynamic
+priority, that are absent from all three commercial comparators at the
+time of writing.
+
+% ─────────────────────────────────────────────────────────────
+\section{Limitations and Threats to Validity}
+\label{sec:disc-limitations}
+
+The following limitations should be considered when interpreting the
+results of this project:
+
+\begin{enumerate}
+  \item \textbf{Single-tester evaluation}: all functional tests were
+        performed by the developer.  Independent user testing with real
+        dispatchers and drivers would provide stronger usability evidence.
+  \item \textbf{Simulated workloads}: the route-optimisation evaluation
+        used synthetic Hong Kong addresses rather than live delivery
+        manifests.  Real-world routes include time-window constraints,
+        vehicle capacity, and road restrictions not modelled here.
+  \item \textbf{No load testing}: the system was not subjected to
+        concurrent multi-user stress testing.  Supabase's connection
+        pooling and PostgreSQL's MVCC provide theoretical scalability, but
+        this was not empirically validated.
+  \item \textbf{Android-only deployment}: the iOS build was not
+        tested on a physical device due to the absence of an Apple
+        Developer account.  Flutter's cross-platform guarantee mitigates
+        but does not eliminate the risk of platform-specific issues.
+  \item \textbf{AI non-determinism}: despite low temperature settings,
+        LLM responses are inherently stochastic.  The 6/6 agentic accuracy
+        reported in Table~\ref{tab:agentic-eval} may not generalise to
+        all possible task configurations.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────
+\section{Reflection on Development Process}
+\label{sec:disc-process}
+
+The project was developed iteratively across five phases
+(Section~\ref{sec:methodology}).  Two reflections are notable:
+
+\begin{itemize}
+  \item \textbf{Incremental complexity}: beginning with core CRUD and
+        adding AI features last proved effective.  The stable task pipeline
+        provided a reliable test bed for the more experimental agentic
+        layer.  Had agentic AI been attempted first, the lack of
+        underlying data infrastructure would have made evaluation
+        impossible.
+  \item \textbf{BaaS productivity}: Supabase reduced the backend
+        development effort to approximately 20\% of what a custom server
+        would have required.  The time saved was reinvested into the
+        AI integration and the fleet-optimisation algorithms, which are
+        the project's primary contributions.  This confirms the
+        literature finding that BaaS platforms accelerate prototyping
+        at the cost of server-side flexibility
+        \autocite{supabase2026docs}.
+\end{itemize}

@@ -1,0 +1,84 @@
+﻿% Appendix B: Detailed Requirements Traceability
+\chapter{Detailed Requirements}
+\label{app:requirements}
+
+This appendix provides a traceability matrix linking each project objective
+(Section~\ref{sec:objectives}) to the corresponding design artefact, implementation
+module, and test evidence.
+
+\section{Functional Requirements}
+
+Table~\ref{tab:req-trace} maps the fourteen objectives to chapters and test cases.
+All requirements were verified during the evaluation phase
+(Chapter~\ref{ch:testing}).
+
+\begin{small}
+\begin{longtable}{@{}p{0.7cm}p{2.6cm}p{2.6cm}p{3.8cm}p{1.8cm}@{}}
+\caption{Requirements traceability matrix.}
+\label{tab:req-trace}\\
+\toprule
+\textbf{ID} & \textbf{Objective} & \textbf{Design Ref.} & \textbf{Implementation} & \textbf{Test Ref.}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Objective} & \textbf{Design Ref.} & \textbf{Implementation} & \textbf{Test Ref.}\\
+\midrule
+\endhead
+\midrule \multicolumn{5}{r}{\textit{Continued on next page}}\\
+\endfoot
+\bottomrule
+\endlastfoot
+
+O1 & Unified platform & Sec.~\ref{sec:architecture} & Flutter single-codebase, GoRouter role-based routing & A1, D1 \\
+O2 & Task management & Sec.~\ref{sec:architecture} & \texttt{TaskService}, CSV bulk-import, CRUD screens & A2--A5 \\
+O3 & Route sequencing & Sec.~\ref{sec:route-impl} & Nearest-neighbour + Haversine, Mapbox static maps & A6, A7 \\
+O4 & Proof of delivery & Sec.~\ref{sec:architecture} & Camera/QR capture, Supabase Storage upload & D5, D6 \\
+O5 & AI assistant & Sec.~\ref{sec:ai-agentic} & DeepSeek R1 via OpenRouter, summary + chat & D7, D8 \\
+O6 & Multi-tenant RLS & Sec.~\ref{sec:security} & 20+ RLS policies, \texttt{is\_company\_member()} & A12, RLS test \\
+O7 & Driver recommendation & Sec.~\ref{sec:architecture} & Composite-score RPC (Eq.~\ref{eq:rec-score}) & A8 \\
+O8 & Customer communication & Sec.~\ref{sec:architecture} & Tracking-code generation, QR lookup & A10 \\
+O9 & Agentic AI & Sec.~\ref{sec:ai-agentic} & JSON action parsing, one-tap execute & D9, D10 \\
+O10 & Real-time chat & Sec.~\ref{sec:architecture} & Supabase Realtime, \texttt{chat\_messages} table & A9, D11 \\
+O11 & Dynamic priority & Sec.~\ref{sec:route-impl} & Algorithm~\ref{alg:priority}, time-window scoring & D12 \\
+O12 & Mid-shift re-sequencing & Sec.~\ref{sec:route-impl} & GPS-anchored NN from current position & D13 \\
+O13 & Fleet-wide optimisation & Sec.~\ref{sec:route-impl} & Multi-driver cluster assignment & A11 \\
+O14 & Performance-aware scoring & Sec.~\ref{sec:architecture} & \texttt{recommend\_driver\_for\_tasks()} overload & A8 \\
+\end{longtable}
+\end{small}
+
+\section{Non-Functional Requirements}
+
+Table~\ref{tab:nfr} summarises the non-functional requirements and their realisation.
+
+\begin{table}[H]
+\centering
+\caption{Non-functional requirements.}
+\label{tab:nfr}
+\begin{tabular}{@{}p{2.8cm}p{5.5cm}p{5.5cm}@{}}
+\toprule
+\textbf{Requirement} & \textbf{Target} & \textbf{Realisation}\\
+\midrule
+Performance & Screen load \textless\,2\,s on mid-range device & Drift cache provides instant startup; API calls \textless\,1.5\,s observed \\
+Security & Tenant data isolation; RBAC & PostgreSQL RLS on all 12 tables; three-role permission model \\
+Availability & Offline-first operation & Drift local DB + sync queue with exponential backoff \\
+Usability & Single app for admin and driver & Role-aware GoRouter; consistent Material 3 theming \\
+Maintainability & Modular architecture & Repository pattern, service layer, MVVM separation \\
+Portability & Android 8.0+ (API 26) & \texttt{minSdkVersion 26}, \texttt{targetSdkVersion 35} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Use-Case Summary}
+
+The system supports three primary actor roles:
+
+\begin{enumerate}
+  \item \textbf{Administrator / Dispatcher}: creates tasks, imports CSV batches,
+        generates routes, assigns drivers, reviews PoD evidence, manages fleet,
+        communicates via chat, triggers AI actions.
+  \item \textbf{Driver}: views assigned tasks, navigates optimised routes, captures
+        PoD (photo + code), reports location telemetry, uses AI summaries and chat,
+        re-sequences route mid-shift.
+  \item \textbf{Customer}: looks up delivery status via tracking code or QR scan
+        (public endpoint, no authentication required).
+\end{enumerate}

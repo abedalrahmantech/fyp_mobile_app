@@ -33,3 +33,31 @@ Thumbs.db
 # Keystore (never commit)
 *.jks
 *.keystore
+
+# LaTeX auxiliary files (root-level build artifacts)
+main.aux
+main.bbl
+main.bcf
+main.blg
+main.lof
+main.log
+main.lot
+main.out
+main.run.xml
+main.toc
+
+# LaTeX auxiliary files in report/
+report/*.aux
+report/*.bbl
+report/*.bcf
+report/*.blg
+report/*.lof
+report/*.lot
+report/*.run.xml
+report/*.toc
+report/*.glo
+report/*.ist
+report/*.acn
+
+# Debug output
+debug/

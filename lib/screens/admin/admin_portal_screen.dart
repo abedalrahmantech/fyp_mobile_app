@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/app_config.dart';
+import '../../models/delivery_task.dart';
+import '../../services/ai_service.dart';
 import '../../services/mapbox_service.dart';
 
 class AdminPortalScreen extends StatefulWidget {
@@ -65,6 +67,10 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
   List<_ChatMessage> _chatMessages = const [];
   final _chatInputController = TextEditingController();
   String? _selectedChatDriver;
+
+  // AI fleet summary state
+  bool _aiSummaryLoading = false;
+  String? _aiSummaryText;
 
   // Customer tracking lookup state
   bool _trackingLoading = false;
@@ -616,7 +622,89 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
           ],
         ),
         const SizedBox(height: 28),
+        _buildAiFleetSummary(),
+        const SizedBox(height: 20),
         _buildTaskList(),
+      ],
+    );
+  }
+
+  // ─── AI Fleet Summary (A12) ──────────────────────────────────────
+  Future<void> _runFleetAiSummary() async {
+    final config = context.read<AppConfig>();
+    if (config.openRouterApiKey.isEmpty) {
+      setState(
+          () => _aiSummaryText = 'Set OPENROUTER_API_KEY in .env to use AI.');
+      return;
+    }
+    setState(() {
+      _aiSummaryLoading = true;
+      _aiSummaryText = null;
+    });
+    try {
+      final tasks = _tasks.map((t) => DeliveryTask.fromJson(t)).toList();
+      final service = AiService(
+        apiKey: config.openRouterApiKey,
+        baseUrl: config.openRouterBaseUrl,
+        model: config.openRouterModel,
+      );
+      final summary = await service.summarizeTasks(tasks);
+      service.dispose();
+      if (!mounted) return;
+      setState(() => _aiSummaryText = summary ?? 'No summary returned.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _aiSummaryText = 'AI error: $e');
+    } finally {
+      if (mounted) setState(() => _aiSummaryLoading = false);
+    }
+  }
+
+  Widget _buildAiFleetSummary() {
+    return _sectionCard(
+      icon: Icons.auto_awesome,
+      title: 'AI Fleet Summary',
+      actions: [
+        ElevatedButton.icon(
+          onPressed: _aiSummaryLoading ? null : _runFleetAiSummary,
+          icon: _aiSummaryLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.auto_awesome, size: 18),
+          label: Text(_aiSummaryLoading ? 'Generating…' : 'Generate Summary'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF004E7C),
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+      children: [
+        if (_aiSummaryText != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF004E7C).withAlpha(12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF004E7C).withAlpha(40)),
+            ),
+            child: SelectableText(
+              _aiSummaryText!,
+              style: const TextStyle(fontSize: 14, height: 1.5),
+            ),
+          ),
+        ] else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(
+              'Tap "Generate Summary" to get an AI-powered overview of all fleet tasks.',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+          ),
       ],
     );
   }
@@ -847,31 +935,41 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
     return Row(
       children: [
         // ── NavigationRail (sidebar) ──
-        NavigationRail(
-          backgroundColor: Colors.white,
-          selectedIndex: _navIndex,
-          onDestinationSelected: (i) => setState(() => _navIndex = i),
-          labelType: NavigationRailLabelType.all,
-          indicatorColor: brandPrimary.withAlpha(30),
-          selectedIconTheme: IconThemeData(color: brandPrimary),
-          selectedLabelTextStyle: TextStyle(
-            color: brandPrimary,
-            fontWeight: FontWeight.w600,
-            fontSize: 11,
-          ),
-          unselectedIconTheme: IconThemeData(color: Colors.grey.shade500),
-          unselectedLabelTextStyle: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 11,
-          ),
-          leading: const SizedBox(height: 8),
-          destinations: [
-            for (final n in _navItems)
-              NavigationRailDestination(
-                icon: Icon(n.icon),
-                label: Text(n.label),
+        SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height -
+                  (kToolbarHeight + MediaQuery.of(context).padding.top),
+            ),
+            child: IntrinsicHeight(
+              child: NavigationRail(
+                backgroundColor: Colors.white,
+                selectedIndex: _navIndex,
+                onDestinationSelected: (i) => setState(() => _navIndex = i),
+                labelType: NavigationRailLabelType.all,
+                indicatorColor: brandPrimary.withAlpha(30),
+                selectedIconTheme: IconThemeData(color: brandPrimary),
+                selectedLabelTextStyle: TextStyle(
+                  color: brandPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+                unselectedIconTheme: IconThemeData(color: Colors.grey.shade500),
+                unselectedLabelTextStyle: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 11,
+                ),
+                leading: const SizedBox(height: 4),
+                destinations: [
+                  for (final n in _navItems)
+                    NavigationRailDestination(
+                      icon: Icon(n.icon, size: 22),
+                      label: Text(n.label),
+                    ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
         const VerticalDivider(width: 1, thickness: 1),
         // ── Main content area ──
@@ -931,7 +1029,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      trailing!,
+                      trailing,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -941,7 +1039,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                   ),
                 ],
                 const Spacer(),
-                if (actions != null) ...actions!,
+                if (actions != null) ...actions,
               ],
             ),
             const Divider(height: 24),
@@ -1246,7 +1344,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: editStatus,
+                      initialValue: editStatus,
                       items: _statusOptions
                           .map((s) => DropdownMenuItem(
                                 value: s,
@@ -1840,7 +1938,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
         if (addr.isEmpty) continue;
         final geo = await mapbox.forwardGeocode(addr);
         if (geo != null) {
-          tasks.add({...t as Map<String, dynamic>, '_geo': geo});
+          tasks.add({...t, '_geo': geo});
         }
       }
 
@@ -1861,7 +1959,7 @@ class _AdminPortalScreenState extends State<AdminPortalScreen> {
           }
         }
         if (dGeo != null) {
-          drivers.add({...d as Map<String, dynamic>, '_geo': dGeo});
+          drivers.add({...d, '_geo': dGeo});
         }
       }
 
