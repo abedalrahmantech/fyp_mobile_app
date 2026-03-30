@@ -27,7 +27,7 @@ approximate column count (including columns added by later migrations).
 \texttt{telemetry\_events}   & Driver location pings  & 12 & Yes \\
 \texttt{sync\_queue\_items}  & Offline mutation queue  & 8  & Yes \\
 \texttt{media\_artifacts}    & PoD photos and documents & 9 & Yes \\
-\texttt{geofence\_rules}     & Geo-fence definitions  & 8  & Yes \\
+\texttt{geofence\_rules}     & Geo-fence definitions  & 8  & No  \\
 \texttt{notifications}       & System notifications   & 7  & Yes \\
 \texttt{audit\_log}          & Immutable audit trail  & 6  & No  \\
 \texttt{chat\_messages}      & Admin--driver messaging & 7  & Yes \\
@@ -56,8 +56,8 @@ Security.  Key relationships:
 
 \section{Row-Level Security Policies}
 
-Fifteen principal policy rules, expanding to over twenty individual PostgreSQL
-policies, enforce multi-tenant isolation.  Every policy calls the
+Seventeen individual PostgreSQL policies enforce multi-tenant isolation across
+eleven tables.  Every policy calls the
 \texttt{is\_company\_member(target\_company\_id)} helper, which checks whether
 \texttt{auth.uid()} belongs to the given company.
 Table~\ref{tab:rls-policies} enumerates them.
@@ -91,6 +91,8 @@ Table~\ref{tab:rls-policies} enumerates them.
 \texttt{chat\_messages}   & SELECT & Sender, recipient, or broadcast within company \\
 \texttt{chat\_messages}   & INSERT & Sender is the authenticated member \\
 \texttt{chat\_messages}   & UPDATE & Recipient marking messages read \\
+\texttt{sync\_queue\_items} & ALL    & Member of the same company \\
+\texttt{media\_artifacts}    & ALL    & Member of the same company \\
 \texttt{notifications}    & SELECT & Member of the same company \\
 \end{longtable}
 \end{small}

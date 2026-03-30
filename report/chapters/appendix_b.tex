@@ -34,7 +34,7 @@ O2 & Task management & Sec.~\ref{sec:architecture} & \texttt{TaskService}, CSV b
 O3 & Route sequencing & Sec.~\ref{sec:route-impl} & Nearest-neighbour + Haversine, Mapbox static maps & A6, A7 \\
 O4 & Proof of delivery & Sec.~\ref{sec:architecture} & Camera/QR capture, Supabase Storage upload & D5, D6 \\
 O5 & AI assistant & Sec.~\ref{sec:ai-agentic} & DeepSeek R1 via OpenRouter, summary + chat & D7, D8 \\
-O6 & Multi-tenant RLS & Sec.~\ref{sec:security} & 20+ RLS policies, \texttt{is\_company\_member()} & A12, RLS test \\
+O6 & Multi-tenant RLS & Sec.~\ref{sec:security} & 17 RLS policies, \texttt{is\_company\_member()} & A12, RLS test \\
 O7 & Driver recommendation & Sec.~\ref{sec:architecture} & Composite-score RPC (Eq.~\ref{eq:rec-score}) & A8 \\
 O8 & Customer communication & Sec.~\ref{sec:architecture} & Tracking-code generation, QR lookup & A10 \\
 O9 & Agentic AI & Sec.~\ref{sec:ai-agentic} & JSON action parsing, one-tap execute & D9, D10 \\
@@ -59,7 +59,7 @@ Table~\ref{tab:nfr} summarises the non-functional requirements and their realisa
 \textbf{Requirement} & \textbf{Target} & \textbf{Realisation}\\
 \midrule
 Performance & Screen load \textless\,2\,s on mid-range device & Drift cache provides instant startup; API calls \textless\,1.5\,s observed \\
-Security & Tenant data isolation; RBAC & PostgreSQL RLS on all 12 tables; three-role permission model \\
+Security & Tenant data isolation; RBAC & PostgreSQL RLS on 11 of 13 tables; three-role permission model \\
 Availability & Offline-first operation & Drift local DB + sync queue with exponential backoff \\
 Usability & Single app for admin and driver & Role-aware GoRouter; consistent Material 3 theming \\
 Maintainability & Modular architecture & Repository pattern, service layer, MVVM separation \\

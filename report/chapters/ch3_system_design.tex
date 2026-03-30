@@ -316,12 +316,15 @@ a custom authentication middleware \autocite{supabase2026docs}.
 \subsection{Row-Level Security (RLS)}
 \label{sec:rls}
 
-All thirteen tables have RLS enabled.  A shared helper function,
+Eleven of the thirteen tables have RLS enabled; \texttt{audit\_log}
+(immutable, insert-only) and \texttt{geofence\_rules} (reserved for future
+use) are exempt.  A shared helper function,
 \texttt{is\_company\_member(company\_id)}, returns \texttt{true} only when the
 authenticated user belongs to the specified company.  Every \texttt{SELECT},
-\texttt{INSERT}, \texttt{UPDATE}, and \texttt{DELETE} policy on every table
-invokes this function, guaranteeing that a query can never read or modify
-rows belonging to a different tenant \autocite{postgresql2026rls,aws2020rls}.
+\texttt{INSERT}, \texttt{UPDATE}, and \texttt{DELETE} policy on the eleven
+RLS-protected tables invokes this function, guaranteeing that a query can
+never read or modify rows belonging to a different tenant
+\autocite{postgresql2026rls,aws2020rls}.
 
 For chat messages, additional fine-grained policies restrict reads to the
 sender, recipient, or broadcast scope, and restrict \texttt{UPDATE} (marking
@@ -499,9 +502,13 @@ with a progressive backoff schedule (0, 10, 30, 60, 120\,s delays, up to five
 attempts).  On reconnection, Supabase
 Realtime subscriptions automatically push any server-side changes that
 occurred while the device was offline, and the client reconciles state via
-\texttt{updated\_at} timestamps.  This design ensures that drivers operating
-in areas with intermittent cellular coverage—common in Hong Kong's industrial
-estates—can continue capturing deliveries without data loss.
+\texttt{updated\_at} timestamps.  Offline-first design is widely recommended
+for mobile applications that must remain usable under unreliable network
+conditions; modern frameworks commonly employ local caching and deferred
+synchronisation to provide an ``always-on'' user experience
+\autocite{gaur2024offlinefirst}.  This design ensures that drivers operating
+in areas with intermittent cellular coverage, which is common in Hong Kong's
+industrial estates, can continue capturing deliveries without data loss.
 
 % ─────────────────────────────────────────────────────────────
 \section{Interaction Sequences}

@@ -5,11 +5,21 @@
 \section{Background and Motivation}
 \label{sec:background}
 
-The logistics sector is one of Hong Kong's most economically significant industries, second only to financial services \autocite{chan2025hkindustrial}. As one of the world's most densely urbanised cities and a major logistics hub in the Asia--Pacific region, delivery operations must contend with congested road networks, compact geographic areas, and demanding service-level expectations. Small and medium-sized enterprises (SMEs), which form the backbone of the local logistics market, are often the most affected; unlike large corporations with access to proprietary fleet-management platforms, SMEs commonly rely on fragmented tools for dispatching, navigation, and proof of delivery \autocite{bhattacharjee2024digitizing}.
+Hong Kong's logistics sector is a critical part of the local economy; government
+officials note that ``trade and logistics are two very important subjects'' for
+the city \autocite{tlb2025logistics}.  Yet despite its importance, last-mile
+delivery in Hong Kong is extremely challenging.  Last-mile legs can contribute
+over 50\% of a shipment's total cost \autocite{fedex2025lastmile}, and Hong
+Kong's dense urban layout leads to severe traffic congestion and tight delivery
+windows.  At present, many SMEs still coordinate deliveries using fragmented,
+manual processes, such as phone calls and spreadsheets, rather than an integrated
+system.  This fragmentation leads to suboptimal routes, communication delays,
+and higher operating costs for courier businesses
+\autocite{bhattacharjee2024digitizing}.
 
 This fragmentation manifests in several concrete problems. Dispatchers lack a single unified interface for assigning tasks, monitoring driver progress, and reviewing delivery evidence. Drivers, in turn, operate across multiple disjointed applications: tasks arrive via one channel, navigation occurs in another, and proof-of-delivery (PoD) reporting is handled separately. The result is suboptimal routing, communication delays, and increased operating costs. Beyond commercial implications, poorly coordinated operations can compromise worker welfare: drivers navigating unfamiliar locations under tight schedules and without adequate route guidance face elevated stress and safety risks \autocite{apdullah2021occupational}.
 
-Meanwhile, the rapid maturity of large language models (LLMs) has opened new avenues for operational decision support. Recent research demonstrates that generative AI can meaningfully reduce cognitive load and accelerate information retrieval in enterprise contexts \autocite{brynjolfsson2023generative}, yet its application within last-mile logistics remains largely unexplored. The convergence of these factors (an industry need for unified digital tools, the limitations of existing commercial solutions, and the emergence of practical AI capabilities) motivated the development of OrderVista.
+Meanwhile, the rapid maturity of large language models (LLMs) has opened new avenues for operational decision support.  Recent empirical work shows that generative AI tools can significantly ease routine informational tasks, freeing experts to focus on higher-level reasoning \autocite{brynjolfsson2023generative}.  However, despite such potential, LLM-driven decision support has not yet been applied in a systematic way to last-mile logistics.  This gap, combined with the industry need for unified digital tools and the limitations of existing commercial solutions, motivated the development of OrderVista.
 
 \section{Problem Statement}
 \label{sec:problem}

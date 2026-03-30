@@ -400,9 +400,13 @@ where $w_a \in \{0.5, 1.0\}$ is the availability weight, $d_{\text{km}}$ is
 the PostGIS-computed distance from the driver's last known location to the task
 cluster centroid, $n_{\text{tasks}}$ is the driver's current task count, and
 $r_{\text{completion}}$ is the ratio of successfully delivered tasks to total
-assigned tasks (historical).  The function is executed entirely within
-PostgreSQL, leveraging PostGIS \texttt{ST\_Distance} for spatial computation
-and avoiding a network round-trip for each candidate driver.
+assigned tasks (historical).  Composite scoring strategies of this kind are
+common in dispatch heuristics; ride-hailing platforms such as Uber
+typically weight driver proximity and availability against current workload
+when selecting assignments \autocite{cachon2017surge}.  The function is
+executed entirely within PostgreSQL, leveraging PostGIS
+\texttt{ST\_Distance} for spatial computation and avoiding a network
+round-trip for each candidate driver.
 
 \paragraph{Alternatives considered.}
 A client-side scoring approach was prototyped first but required fetching all

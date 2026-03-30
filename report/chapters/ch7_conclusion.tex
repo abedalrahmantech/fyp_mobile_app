@@ -28,7 +28,7 @@ achieved and verified with traceable test evidence
         structured action recommendations with a human confirmation gate,
         achieving 6/6 correct action selections in evaluation
         (Table~\ref{tab:agentic-eval}).
-  \item A \textbf{multi-tenant security model} enforced by 20+ PostgreSQL
+  \item A \textbf{multi-tenant security model} enforced by 17 PostgreSQL
         Row-Level Security policies across 11 tables, verified through
         cross-tenant isolation tests (Section~\ref{sec:rls-test}).
   \item An \textbf{offline-first architecture} using Drift (SQLite) with
@@ -101,9 +101,14 @@ Several extensions would strengthen OrderVista for production deployment:
   \item \textbf{iOS deployment}: building and testing the iOS target
         with an Apple Developer account to validate cross-platform
         parity.
-  \item \textbf{Google Play Store release}: publishing the Android APK
-        (currently 75.7\,MB) to the Play Store with appropriate privacy
-        policies and data-safety declarations.
+  \item \textbf{Google Play Store release}: a signed Android App Bundle
+        has been uploaded to Google Play Console and a closed testing
+        track with 12 recruited testers is currently in progress.
+        Google's policy requires new developer accounts to maintain a
+        closed test for a minimum of 14~days before production access
+        is granted.  Full public release, including privacy-policy
+        hosting and data-safety declarations, will follow upon
+        completion of this mandatory review period.
 \end{itemize}
 
 \paragraph{Long-term research directions.}
@@ -129,9 +134,17 @@ Several extensions would strengthen OrderVista for production deployment:
 OrderVista demonstrates that a single-developer academic project can
 deliver a feature-rich, AI-enhanced logistics platform by leveraging modern
 BaaS infrastructure, open-weight language models, and disciplined iterative
-development.  The platform's 14 fulfilled objectives, 26 passing functional
+development.  The platform's 14 fulfilled objectives, 29 passing functional
 tests, and measurable route-optimisation improvements provide evidence that
 the approach is sound.  While production readiness requires the
 enhancements outlined above, the architectural foundations (modular route
 pipeline, database-enforced tenancy, and human-gated agentic AI) offer a
 solid base for continued development.
+
+Ultimately, the project's value extends beyond its technical contributions.
+By consolidating fragmented workflows into a single interface, providing
+optimised routing and clear task sequencing, and placing AI-driven decision
+support directly in drivers' hands, OrderVista aims to reduce the
+avoidable coordination burden borne by frontline logistics workers, helping
+them complete delivery work more safely, more efficiently, and with less
+operational friction.

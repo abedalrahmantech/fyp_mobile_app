@@ -171,3 +171,58 @@ ordervista/
   test/                     # Unit and widget tests
   pubspec.yaml              # Dependencies
 \end{verbatim}
+
+%--------------------------------------------------------------
+\section{Web Deployment}
+\label{sec:web-deploy}
+
+The admin portal is deployed as a Flutter Web release on Vercel.
+The production URL is:
+
+\begin{center}
+\url{https://ordervista.vercel.app}
+\end{center}
+
+The web build was compiled with environment variables baked in at build time
+using \texttt{flutter build web --release --dart-define-from-file=.env}.
+A \texttt{vercel.json} rewrite rule ensures that Flutter's client-side
+routing functions correctly on page refresh and deep links.
+
+%--------------------------------------------------------------
+\section{Google Play Store Submission}
+\label{sec:play-store}
+
+A signed Android App Bundle (\texttt{app-release.aab}, 55.9\,MB) was uploaded
+to Google Play Console under the closed testing track.  At the time of
+writing, 12~testers have been recruited and the mandatory 14-day closed
+testing period required by Google for new developer accounts is in progress.
+Production access will be requested upon completion of this review period.
+
+%--------------------------------------------------------------
+\section{Evaluation Access Credentials}
+\label{sec:eval-creds}
+
+Table~\ref{tab:eval-creds} provides test credentials for evaluators to
+access the live deployment.  These accounts are provisioned on the project's
+Supabase instance and are intended solely for examination purposes.
+
+\begin{table}[H]
+\centering
+\caption{Evaluation credentials for the live system.}
+\label{tab:eval-creds}
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Role} & \textbf{Email} & \textbf{Password} & \textbf{Access Point}\\
+\midrule
+Admin / Dispatcher & \texttt{abed-al-rahman@cityu.com} & \texttt{profgerhardcs4514} & \url{https://ordervista.vercel.app} \\
+Driver             & \texttt{worker2@gmail.com}          & \texttt{worker2}          & Android APK \\
+Driver             & \texttt{worker3@gmail.com}          & \texttt{worker3}          & Android APK \\
+Driver             & \texttt{worker4@gmail.com}          & \texttt{worker4}          & Android APK \\
+Driver             & \texttt{worker5@gmail.com}          & \texttt{worker5}          & Android APK \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{Note:} The admin portal is accessible via web browser.  The
+driver application requires the signed Android APK installed on a physical
+device (GPS and camera features are not available in browser).
