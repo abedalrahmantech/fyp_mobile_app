@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - OrderVista</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; color: #333; background: #f9fafb; }
+    .container { max-width: 800px; margin: 0 auto; padding: 40px 24px; }
+    h1 { font-size: 2rem; color: #1a1a2e; margin-bottom: 8px; }
+    .subtitle { color: #666; margin-bottom: 32px; font-size: 0.95rem; }
+    h2 { font-size: 1.25rem; color: #1a1a2e; margin-top: 28px; margin-bottom: 12px; }
+    p, li { margin-bottom: 10px; font-size: 0.95rem; }
+    ul { padding-left: 24px; margin-bottom: 16px; }
+    a { color: #2563eb; }
+    .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; color: #999; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Privacy Policy</h1>
+    <p class="subtitle">OrderVista: AI-Enhanced Logistics Dispatch Platform<br>Last updated: 8 April 2026</p>
+
+    <h2>1. Introduction</h2>
+    <p>OrderVista ("the App") is a logistics dispatch platform developed as a Final Year Project at the City University of Hong Kong. This privacy policy explains how the App collects, uses, and protects your information.</p>
+
+    <h2>2. Information We Collect</h2>
+    <p>The App may collect the following data:</p>
+    <ul>
+      <li><strong>Account information:</strong> Email address and display name used for authentication via Supabase Auth.</li>
+      <li><strong>Location data:</strong> GPS coordinates from your device (when granted permission) to enable route optimisation, mid-shift re-sequencing, and driver proximity calculations. Location data is collected only while the App is in use.</li>
+      <li><strong>Camera and photos:</strong> The App accesses your device camera solely for capturing proof-of-delivery photographs and scanning barcodes/QR codes during task completion. Images are uploaded to secure cloud storage (Supabase Storage) and associated with the relevant delivery task.</li>
+      <li><strong>Delivery task data:</strong> Task details including addresses, delivery status, timestamps, and driver notes entered during normal use of the platform.</li>
+      <li><strong>Chat messages:</strong> Messages exchanged between administrators and drivers through the in-app real-time chat feature.</li>
+    </ul>
+
+    <h2>3. How We Use Your Information</h2>
+    <p>All collected data is used exclusively for the following purposes:</p>
+    <ul>
+      <li>Authenticating users and managing role-based access (admin, dispatcher, driver).</li>
+      <li>Assigning, sequencing, and tracking delivery tasks.</li>
+      <li>Generating optimised delivery routes based on GPS position.</li>
+      <li>Providing AI-powered task summaries and agentic action suggestions.</li>
+      <li>Recording proof-of-delivery evidence (photos, barcode scans, notes).</li>
+      <li>Facilitating real-time communication between administrators and drivers.</li>
+      <li>Computing driver performance metrics for recommendation scoring.</li>
+    </ul>
+
+    <h2>4. Data Storage and Security</h2>
+    <p>Data is stored in a PostgreSQL database hosted on Supabase (cloud infrastructure in the Southeast Asia region). The database enforces multi-tenant data isolation through 17 Row-Level Security (RLS) policies across 11 tables, ensuring that users can only access data belonging to their own company. All communication between the App and backend services is encrypted via HTTPS/TLS. Authentication tokens are managed through Supabase Auth using JSON Web Tokens (JWT).</p>
+
+    <h2>5. Third-Party Services</h2>
+    <p>The App integrates with the following third-party services:</p>
+    <ul>
+      <li><strong>Supabase</strong> (authentication, database, storage, real-time): <a href="https://supabase.com/privacy">supabase.com/privacy</a></li>
+      <li><strong>Mapbox</strong> (geocoding, static maps): <a href="https://www.mapbox.com/legal/privacy">mapbox.com/legal/privacy</a></li>
+      <li><strong>OpenRouter</strong> (AI model API for DeepSeek R1): <a href="https://openrouter.ai/privacy">openrouter.ai/privacy</a></li>
+    </ul>
+    <p>These services may process data in accordance with their own privacy policies linked above.</p>
+
+    <h2>6. Data Sharing</h2>
+    <p>We do not sell, trade, or rent your personal information to third parties. Data is shared only with the third-party service providers listed above, solely for the purpose of operating the App's features.</p>
+
+    <h2>7. Data Retention</h2>
+    <p>As an academic project prototype, data is retained for the duration of the project evaluation period. Users may request deletion of their account and associated data by contacting the developer.</p>
+
+    <h2>8. Your Rights</h2>
+    <p>You may:</p>
+    <ul>
+      <li>Request access to the personal data we hold about you.</li>
+      <li>Request correction or deletion of your data.</li>
+      <li>Revoke location or camera permissions at any time through your device settings.</li>
+    </ul>
+
+    <h2>9. Children's Privacy</h2>
+    <p>The App is not intended for use by individuals under the age of 18. We do not knowingly collect data from children.</p>
+
+    <h2>10. Changes to This Policy</h2>
+    <p>This privacy policy may be updated from time to time. Any changes will be reflected on this page with an updated revision date.</p>
+
+    <h2>11. Contact</h2>
+    <p>For questions or concerns regarding this privacy policy, please contact:</p>
+    <p>Abed Al-Rahman<br>
+    City University of Hong Kong<br>
+    Department of Computer Science<br>
+    Email: arahman58-c@my.cityu.edu.hk</p>
+
+    <div class="footer">
+      <p>&copy; 2026 OrderVista. City University of Hong Kong, CS4514 Final Year Project.</p>
+    </div>
+  </div>
+</body>
+</html>
