@@ -4,12 +4,12 @@
 
 **CS4514 — Final Year Project (2025–2026)**
 
-**The Hong Kong Polytechnic University**\
-Department of Computing
+**City University of Hong Kong**\
+Department of Computer Science
 
 | | |
 |---|---|
-| **Student** | Abed Al-Rahman (57744270) |
+| **Student** | Abed Al Rahman |
 | **Supervisor** | Prof. HANCKE, Gerhard Petrus |
 | **Project Code** | 25CS022 |
 
@@ -745,13 +745,13 @@ flutter build web --release --dart-define-from-file=.env
 
 ## 12. License
 
-This project is developed as part of CS4514 Final Year Project at The Hong Kong Polytechnic University. All rights reserved.
+This project is developed as part of CS4514 Final Year Project at City University of Hong Kong. All rights reserved.
 
 ---
 
 <div align="center">
 
 **OrderVista** — AI-Enhanced Logistics Dispatch Platform\
-CS4514 Final Year Project | The Hong Kong Polytechnic University | 2025–2026
+CS4514 Final Year Project | City University of Hong Kong | 2025 to 2026
 
 </div>
